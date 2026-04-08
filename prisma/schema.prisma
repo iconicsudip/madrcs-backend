@@ -36,6 +36,7 @@ model User {
   campaigns           Campaign[]
   activities          Activity[]
 
+  @@index([created_at])
   @@map("users")
 }
 
@@ -48,6 +49,8 @@ model RefreshToken {
   expires_at DateTime
   created_at DateTime @default(now())
 
+  @@index([user_id])
+  @@index([expires_at])
   @@map("refresh_tokens")
 }
 
@@ -60,6 +63,9 @@ model OnboardingRequest {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  @@index([user_id])
+  @@index([status])
+  @@index([created_at])
   @@map("onboarding_requests")
 }
 
@@ -76,6 +82,9 @@ model CreditRequest {
   approved_at     DateTime?
   created_at      DateTime @default(now())
 
+  @@index([user_id])
+  @@index([status])
+  @@index([created_at])
   @@map("credit_requests")
 }
 
@@ -88,6 +97,8 @@ model ContactGroup {
   contacts    Contact[] @relation("ContactToGroup")
   created_at  DateTime @default(now())
 
+  @@index([user_id])
+  @@index([created_at])
   @@unique([name, user_id])
   @@map("contact_groups")
 }
@@ -102,6 +113,9 @@ model Contact {
   groups       ContactGroup[] @relation("ContactToGroup")
   created_at   DateTime @default(now())
 
+  @@index([user_id])
+  @@index([status])
+  @@index([created_at])
   @@unique([phone_number, user_id])
   @@map("contacts")
 }
@@ -136,6 +150,8 @@ model TemplateDraft {
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
 
+  @@index([user_id])
+  @@index([created_at])
   @@map("template_drafts")
 }
 
@@ -159,6 +175,9 @@ model Campaign {
   
   events          CampaignEvent[]
 
+  @@index([user_id])
+  @@index([status])
+  @@index([created_at])
   @@unique([name, user_id])
   @@map("campaigns")
 }
@@ -181,6 +200,9 @@ model CampaignEvent {
   telecom_circle    String?
   created_at        DateTime @default(now())
 
+  @@index([campaign_id])
+  @@index([event_type])
+  @@index([created_at])
   @@unique([campaign_id, phone_number])
   @@map("campaign_events")
 }
@@ -196,5 +218,8 @@ model Activity {
   color       String?  // Optional hex or color name
   created_at  DateTime @default(now())
 
+  @@index([user_id])
+  @@index([type])
+  @@index([created_at])
   @@map("activities")
 }

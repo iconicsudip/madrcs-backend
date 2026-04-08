@@ -229,14 +229,31 @@ export class RcsController {
         prisma.campaign.count({ where })
       ]);
 
-      // Map campaigns to include real-time status counts from events for the list view
-      const campaignsWithStats = await Promise.all(campaigns.map(async (c) => {
-        const [delivered, read, clicked] = await Promise.all([
-          prisma.campaignEvent.count({ where: { campaign_id: c.id, delivered_at: { not: null } } }),
-          prisma.campaignEvent.count({ where: { campaign_id: c.id, read_at: { not: null } } }),
-          prisma.campaignEvent.count({ where: { campaign_id: c.id, event_type: RcsEventType.CLICKED } })
-        ]);
-        
+      // Bulk aggregate counts for all retrieved campaigns to avoid N+1 queries
+      const campaignIds = campaigns.map(c => c.id);
+      const [deliveredCounts, readCounts, clickedCounts] = await Promise.all([
+        prisma.campaignEvent.groupBy({
+          by: ['campaign_id'],
+          where: { campaign_id: { in: campaignIds }, delivered_at: { not: null } },
+          _count: true
+        }),
+        prisma.campaignEvent.groupBy({
+          by: ['campaign_id'],
+          where: { campaign_id: { in: campaignIds }, read_at: { not: null } },
+          _count: true
+        }),
+        prisma.campaignEvent.groupBy({
+          by: ['campaign_id'],
+          where: { campaign_id: { in: campaignIds }, event_type: RcsEventType.CLICKED },
+          _count: true
+        })
+      ]);
+
+      const campaignsWithStats = campaigns.map(c => {
+        const delivered = deliveredCounts.find(d => d.campaign_id === c.id)?._count || 0;
+        const read = readCounts.find(r => r.campaign_id === c.id)?._count || 0;
+        const clicked = clickedCounts.find(cl => cl.campaign_id === c.id)?._count || 0;
+
         return {
           ...c,
           internal_sent_count: c._count.events,
@@ -244,7 +261,7 @@ export class RcsController {
           internal_read_count: Math.max(read, clicked),
           internal_clicked_count: clicked
         };
-      }));
+      });
 
       res.status(200).json({ success: true, campaigns: campaignsWithStats, total, page: Number(page) });
     } catch (err: any) {
@@ -397,43 +414,32 @@ export class RcsController {
       startDate.setDate(startDate.getDate() - numDays);
       startDate.setHours(0, 0, 0, 0);
 
-      // Group events by date part
-      const events = await prisma.campaignEvent.findMany({
-        where: {
-          campaign: { user_id: userId },
-          created_at: { gte: startDate }
-        },
-        select: {
-          created_at: true,
-          sent_at: true,
-          delivered_at: true,
-          read_at: true
-        }
-      });
+      // Optimized aggregation using raw SQL for date grouping in the database
+      const volumeData: any[] = await prisma.$queryRaw`
+        SELECT 
+          TO_CHAR(DATE_TRUNC('day', ce.created_at), 'Mon DD') as day,
+          COUNT(ce.sent_at) as sent,
+          COUNT(ce.delivered_at) as delivered,
+          COUNT(ce.read_at) as read
+        FROM campaign_events ce
+        JOIN campaigns c ON ce.campaign_id = c.id
+        WHERE c.user_id = ${userId}
+        AND ce.created_at >= ${startDate}
+        GROUP BY DATE_TRUNC('day', ce.created_at)
+        ORDER BY DATE_TRUNC('day', ce.created_at) ASC
+      `;
 
-      // Aggregate by day
-      const dailyData: Record<string, any> = {};
-      
-      // Initialize all days in range to 0
-      for (let i = 0; i <= numDays; i++) {
-        const d = new Date(startDate);
-        d.setDate(d.getDate() + i);
-        const dayLabel = d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
-        dailyData[dayLabel] = { day: dayLabel, sent: 0, delivered: 0, read: 0 };
-      }
-
-      events.forEach(e => {
-        const dayLabel = new Date(e.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
-        if (dailyData[dayLabel]) {
-          if (e.sent_at) dailyData[dayLabel].sent += 1;
-          if (e.delivered_at) dailyData[dayLabel].delivered += 1;
-          if (e.read_at) dailyData[dayLabel].read += 1;
-        }
-      });
+      // Convert BigInt counts from PostgreSQL to Numbers for JSON serialization
+      const formattedData = volumeData.map(d => ({
+        day: d.day,
+        sent: Number(d.sent),
+        delivered: Number(d.delivered),
+        read: Number(d.read)
+      }));
 
       res.status(200).json({ 
         success: true, 
-        data: Object.values(dailyData) 
+        data: formattedData 
       });
     } catch (err: any) {
       console.error(err);
