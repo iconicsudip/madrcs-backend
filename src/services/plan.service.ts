@@ -32,18 +32,23 @@ export class PlanService {
 
     static async seedDefaultPlans() {
         const defaults = [
-            { name: 'Starter', rate: 0.30 },
-            { name: 'Pro', rate: 0.28 },
-            { name: 'Enterprise', rate: 0.25 }
+            { name: 'Enterprise', rate: 0.25, min: 100000 },
+            { name: 'Pro', rate: 0.28, min: 50000 },
+            { name: 'Starter', rate: 0.30, min: 25000 },
+            { name: 'Business', rate: 0.35, min: 10000 }
         ];
 
         for (const plan of defaults) {
             await prisma.creditPlan.upsert({
                 where: { name: plan.name },
-                update: {},
+                update: {
+                    rate_per_message: plan.rate,
+                    min_credits: plan.min
+                },
                 create: {
                     name: plan.name,
-                    rate_per_message: plan.rate
+                    rate_per_message: plan.rate,
+                    min_credits: plan.min
                 }
             });
         }

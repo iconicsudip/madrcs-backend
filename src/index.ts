@@ -10,6 +10,7 @@ import creditRoutes from './routes/credit.routes';
 import adminRoutes from './routes/admin.routes';
 import rcsRoutes from './routes/rcs.routes';
 import uploadRoutes from './routes/upload.routes';
+import publicRoutes from './routes/public.routes';
 import webhookRoutes from './routes/webhook.routes';
 import { PlanService } from './services/plan.service';
 
@@ -24,6 +25,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/public', publicRoutes);
 app.use('/api/webhooks', webhookRoutes); // Publicly accessible for MSG91 reports
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/user', userRoutes);
