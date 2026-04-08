@@ -1,0 +1,200 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  full_name    String
+  email        String   @unique
+  phone_number String
+  password     String
+  role              String   @default("user")
+  is_verified       Boolean  @default(false)
+  company_name      String?
+  bio               String?
+  msg91_project_id  String?
+  two_fact_enabled  Boolean  @default(false)
+  two_fact_secret   String?
+  recovery_codes    String[] @default([])
+  notification_pref Json?    @default("{\"campaign_alerts\": true, \"low_credit\": true, \"weekly_reports\": false}")
+  credit_plan_id    String?
+  credit_plan       CreditPlan? @relation(fields: [credit_plan_id], references: [id])
+  credit_balance    Int      @default(0)
+  created_at        DateTime @default(now())
+
+  onboarding_requests OnboardingRequest[]
+  refresh_tokens      RefreshToken[]
+  contacts            Contact[]
+  contact_groups      ContactGroup[]
+  credit_requests     CreditRequest[]
+  template_drafts     TemplateDraft[]
+  campaigns           Campaign[]
+  activities          Activity[]
+
+  @@map("users")
+}
+
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model OnboardingRequest {
+  id         String   @id @default(uuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id])
+  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  message    String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("onboarding_requests")
+}
+
+model CreditRequest {
+  id              String   @id @default(uuid())
+  user_id         String
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  credits         Int
+  amount          Float
+  status          CreditRequestStatus @default(PENDING)
+  razorpay_order_id String?
+  razorpay_payment_id String?
+  paid_at         DateTime?
+  approved_at     DateTime?
+  created_at      DateTime @default(now())
+
+  @@map("credit_requests")
+}
+
+model ContactGroup {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  contacts    Contact[] @relation("ContactToGroup")
+  created_at  DateTime @default(now())
+
+  @@unique([name, user_id])
+  @@map("contact_groups")
+}
+
+model Contact {
+  id           String   @id @default(uuid())
+  name         String
+  phone_number String
+  status       String   @default("ACTIVE") // ACTIVE, OPTED_OUT
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  groups       ContactGroup[] @relation("ContactToGroup")
+  created_at   DateTime @default(now())
+
+  @@unique([phone_number, user_id])
+  @@map("contacts")
+}
+
+
+enum CreditRequestStatus {
+  PENDING
+  PAID
+  APPROVED
+  REJECTED
+}
+
+
+model CreditPlan {
+  id                String   @id @default(uuid())
+  name              String   @unique // e.g., Starter, Pro, Enterprise
+  rate_per_message  Float    @default(0.30)
+  min_credits       Int      @default(10000)
+  users             User[]
+  created_at        DateTime @default(now())
+
+  @@map("credit_plans")
+}
+
+model TemplateDraft {
+  id           String   @id @default(uuid())
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  name         String
+  category     String?
+  payload      Json
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@map("template_drafts")
+}
+
+model Campaign {
+  id              String   @id @default(uuid())
+  user_id         String
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  name            String
+  template_name   String
+  type            String   // e.g., RICH_CARD, TEXT
+  status          String   @default("LIVE") // LIVE, SCHEDULED, DRAFT, COMPLETED, PAUSED
+  contact_source  String?  // Group ID or "ALL"
+  scheduled_at    DateTime?
+  total_contacts  Int      @default(0)
+  sent_count      Int      @default(0)
+  namespace       String?
+  
+  msg91_request_id String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  
+  events          CampaignEvent[]
+
+  @@unique([name, user_id])
+  @@map("campaigns")
+}
+
+model CampaignEvent {
+  id            String   @id @default(uuid())
+  campaign_id   String
+  campaign      Campaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+  phone_number  String
+  event_type    String   // SENT, DELIVERED, READ, CLICKED, FAILED, EXPIRED
+  error_details String?
+  status_updated_at DateTime?
+  sent_at           DateTime?
+  delivered_at      DateTime?
+  read_at           DateTime?
+  engagement        String? // For clicked data or similar
+  user_response     String? // For any inbound reply
+  country           String?
+  country_code      String?
+  telecom_circle    String?
+  created_at        DateTime @default(now())
+
+  @@unique([campaign_id, phone_number])
+  @@map("campaign_events")
+}
+
+model Activity {
+  id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  type        String   // CAMPAIGN_LIVE, TEMPLATE_CREATED, WALLET_RECHARGED, TEMPLATE_REJECTED, REPORT_EXPORTED, LOGIN, SIGNUP
+  title       String
+  description String?
+  metadata    Json?
+  color       String?  // Optional hex or color name
+  created_at  DateTime @default(now())
+
+  @@map("activities")
+}
