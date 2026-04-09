@@ -1,24 +1,33 @@
-import { Request, Response } from 'express';
-import { rcsService } from '../services/rcs';
-import prisma from '../config/prisma';
-import { RcsEventType, CampaignStatus } from '../enums/rcs.enum';
-import { RcsProviderConfig, CreateTemplatePayload, RcsLogParams, SendMessagePayload } from '../services/rcs/rcs.interface';
+import { Request, Response } from "express";
+import prisma from "../config/prisma";
+import { CampaignStatus, RcsEventType } from "../enums/rcs.enum";
+import { rcsService } from "../services/rcs";
+import {
+  CreateTemplatePayload,
+  RcsLogParams,
+  RcsProviderConfig,
+  SendMessagePayload,
+} from "../services/rcs/rcs.interface";
 
 export class RcsController {
   private static async getConfig(userId: string): Promise<RcsProviderConfig> {
     const apiKey = process.env.MSG91_API_KEY;
     if (!apiKey) {
-      throw new Error('RCS Service API Key is not configured. Please contact administrator.');
+      throw new Error(
+        "RCS Service API Key is not configured. Please contact administrator.",
+      );
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.msg91_project_id) {
-      throw new Error('Your account is missing an RCS Project ID. Please contact support.');
+      throw new Error(
+        "Your account is missing an RCS Project ID. Please contact support.",
+      );
     }
-    
+
     return {
       apiKey: apiKey,
-      projectId: user.msg91_project_id
+      projectId: user.msg91_project_id,
     };
   }
 
@@ -62,12 +71,12 @@ export class RcsController {
     try {
       const config = await RcsController.getConfig((req as any).user.id);
       const params = req.query as unknown as RcsLogParams;
-      
+
       // Basic validation for dates
       if (!params.startDate || !params.endDate) {
         throw new Error("startDate and endDate are required");
       }
-      
+
       const response = await rcsService.getLogs(config, params);
       res.status(200).json({ success: true, ...response });
     } catch (err: any) {
@@ -77,12 +86,12 @@ export class RcsController {
   }
 
   // --- DRAFT MANAGEMENT ---
-  
+
   static async saveDraft(req: Request, res: Response) {
     try {
       const userId = (req as any).user.id;
       const { name, category, payload } = req.body;
-      
+
       if (!name || !payload) {
         throw new Error("Draft name and payload are required");
       }
@@ -92,8 +101,8 @@ export class RcsController {
           user_id: userId,
           name,
           category,
-          payload
-        }
+          payload,
+        },
       });
       res.status(201).json({ success: true, draft });
     } catch (err: any) {
@@ -107,7 +116,7 @@ export class RcsController {
       const userId = (req as any).user.id;
       const drafts = await prisma.templateDraft.findMany({
         where: { user_id: userId },
-        orderBy: { created_at: 'desc' }
+        orderBy: { created_at: "desc" },
       });
       res.status(200).json({ success: true, drafts });
     } catch (err: any) {
@@ -120,14 +129,14 @@ export class RcsController {
     try {
       const userId = (req as any).user.id;
       const draftId = req.params.id as string;
-      
+
       await prisma.templateDraft.deleteMany({
         where: {
           id: draftId,
-          user_id: userId
-        }
+          user_id: userId,
+        },
       });
-      
+
       res.status(200).json({ success: true, message: "Draft deleted" });
     } catch (err: any) {
       console.error(err);
@@ -139,18 +148,18 @@ export class RcsController {
     try {
       const user = (req as any).user;
       const { limit, userId: queryUserId } = req.query;
-      
+
       let targetUserId = user.id;
-      
+
       // Admins can query other users' activities
-      if (user.role === 'admin' && queryUserId) {
-          targetUserId = queryUserId as string;
+      if (user.role === "admin" && queryUserId) {
+        targetUserId = queryUserId as string;
       }
 
       const activities = await prisma.activity.findMany({
         where: { user_id: targetUserId },
-        orderBy: { created_at: 'desc' },
-        take: limit ? parseInt(limit as string) : 100
+        orderBy: { created_at: "desc" },
+        take: limit ? parseInt(limit as string) : 100,
       });
       res.status(200).json({ success: true, activities });
     } catch (err: any) {
@@ -163,27 +172,27 @@ export class RcsController {
     try {
       const userId = (req as any).user.id;
       const { name } = req.query;
-      
+
       if (!name) {
-          return res.status(200).json({ success: true, available: true });
+        return res.status(200).json({ success: true, available: true });
       }
 
       const existing = await prisma.campaign.findFirst({
-          where: { 
-              user_id: userId,
-              name: {
-                  equals: name as string,
-                  mode: 'insensitive' // Optional: allow case-insensitive check
-              }
-          }
+        where: {
+          user_id: userId,
+          name: {
+            equals: name as string,
+            mode: "insensitive", // Optional: allow case-insensitive check
+          },
+        },
       });
 
-      res.status(200).json({ 
-          success: true, 
-          available: !existing 
+      res.status(200).json({
+        success: true,
+        available: !existing,
       });
     } catch (err: any) {
-        res.status(400).json({ success: false, message: err.message });
+      res.status(400).json({ success: false, message: err.message });
     }
   }
 
@@ -192,24 +201,32 @@ export class RcsController {
   static async getCampaigns(req: Request, res: Response) {
     try {
       const userId = (req as any).user.id;
-      const { page = 1, limit = 10, status, type, startDate, endDate, campaignId } = req.query;
+      const {
+        page = 1,
+        limit = 10,
+        status,
+        type,
+        startDate,
+        endDate,
+        campaignId,
+      } = req.query;
       const skip = (Number(page) - 1) * Number(limit);
 
       const where: any = { user_id: userId };
-      
-      if (status && status !== 'ALL') {
-          where.status = status;
+
+      if (status && status !== "ALL") {
+        where.status = status;
       }
-      if (type && type !== 'all') {
-          where.type = type;
+      if (type && type !== "all") {
+        where.type = type;
       }
-      if (campaignId && campaignId !== 'all') {
-          where.id = campaignId;
+      if (campaignId && campaignId !== "all") {
+        where.id = campaignId;
       }
       if (startDate || endDate) {
-          where.created_at = {};
-          if (startDate) where.created_at.gte = new Date(startDate as string);
-          if (endDate) where.created_at.lte = new Date(endDate as string);
+        where.created_at = {};
+        if (startDate) where.created_at.gte = new Date(startDate as string);
+        if (endDate) where.created_at.lte = new Date(endDate as string);
       }
 
       const [campaigns, total] = await Promise.all([
@@ -218,52 +235,68 @@ export class RcsController {
           include: {
             _count: {
               select: {
-                events: true
-              }
-            }
+                events: true,
+              },
+            },
           },
-          orderBy: { created_at: 'desc' },
+          orderBy: { created_at: "desc" },
           skip,
-          take: Number(limit)
+          take: Number(limit),
         }),
-        prisma.campaign.count({ where })
+        prisma.campaign.count({ where }),
       ]);
 
       // Bulk aggregate counts for all retrieved campaigns to avoid N+1 queries
-      const campaignIds = campaigns.map(c => c.id);
+      const campaignIds = campaigns.map((c) => c.id);
       const [deliveredCounts, readCounts, clickedCounts] = await Promise.all([
         prisma.campaignEvent.groupBy({
-          by: ['campaign_id'],
-          where: { campaign_id: { in: campaignIds }, delivered_at: { not: null } },
-          _count: true
+          by: ["campaign_id"],
+          where: {
+            campaign_id: { in: campaignIds },
+            delivered_at: { not: null },
+          },
+          _count: true,
         }),
         prisma.campaignEvent.groupBy({
-          by: ['campaign_id'],
+          by: ["campaign_id"],
           where: { campaign_id: { in: campaignIds }, read_at: { not: null } },
-          _count: true
+          _count: true,
         }),
         prisma.campaignEvent.groupBy({
-          by: ['campaign_id'],
-          where: { campaign_id: { in: campaignIds }, event_type: RcsEventType.CLICKED },
-          _count: true
-        })
+          by: ["campaign_id"],
+          where: {
+            campaign_id: { in: campaignIds },
+            event_type: RcsEventType.CLICKED,
+          },
+          _count: true,
+        }),
       ]);
 
-      const campaignsWithStats = campaigns.map(c => {
-        const delivered = deliveredCounts.find(d => d.campaign_id === c.id)?._count || 0;
-        const read = readCounts.find(r => r.campaign_id === c.id)?._count || 0;
-        const clicked = clickedCounts.find(cl => cl.campaign_id === c.id)?._count || 0;
+      const campaignsWithStats = campaigns.map((c) => {
+        const delivered =
+          deliveredCounts.find((d) => d.campaign_id === c.id)?._count || 0;
+        const read =
+          readCounts.find((r) => r.campaign_id === c.id)?._count || 0;
+        const clicked =
+          clickedCounts.find((cl) => cl.campaign_id === c.id)?._count || 0;
 
         return {
           ...c,
           internal_sent_count: c._count.events,
           internal_delivered_count: delivered,
           internal_read_count: Math.max(read, clicked),
-          internal_clicked_count: clicked
+          internal_clicked_count: clicked,
         };
       });
 
-      res.status(200).json({ success: true, campaigns: campaignsWithStats, total, page: Number(page) });
+      res
+        .status(200)
+        .json({
+          success: true,
+          campaigns: campaignsWithStats,
+          total,
+          page: Number(page),
+        });
     } catch (err: any) {
       console.error(err);
       res.status(400).json({ success: false, message: err.message });
@@ -273,7 +306,15 @@ export class RcsController {
   static async createCampaign(req: Request, res: Response) {
     try {
       const userId = (req as any).user.id;
-      const { name, template_name, namespace, type, contact_source, scheduled_at, contacts } = req.body;
+      const {
+        name,
+        template_name,
+        namespace,
+        type,
+        contact_source,
+        scheduled_at,
+        contacts,
+      } = req.body;
 
       if (!name || !template_name || !type) {
         throw new Error("Campaign name, template, and type are required");
@@ -283,46 +324,49 @@ export class RcsController {
       let totalContacts = 0;
       let targetContacts: string[] = contacts || [];
 
-      if (contact_source === 'ALL') {
-          const allUserContacts = await prisma.contact.findMany({ where: { user_id: userId, status: 'ACTIVE' }, select: { phone_number: true } });
-          totalContacts = allUserContacts.length;
-          targetContacts = allUserContacts.map(c => c.phone_number);
-      } else if (contact_source === 'DEMO' || Array.isArray(contacts)) {
-          totalContacts = targetContacts.length;
+      if (contact_source === "ALL") {
+        const allUserContacts = await prisma.contact.findMany({
+          where: { user_id: userId, status: "ACTIVE" },
+          select: { phone_number: true },
+        });
+        totalContacts = allUserContacts.length;
+        targetContacts = allUserContacts.map((c) => c.phone_number);
+      } else if (contact_source === "DEMO" || Array.isArray(contacts)) {
+        totalContacts = targetContacts.length;
       } else if (contact_source) {
-          const group = await prisma.contactGroup.findFirst({
-              where: { id: contact_source, user_id: userId },
-              include: { contacts: { select: { phone_number: true } } }
-          });
-          totalContacts = group?.contacts.length || 0;
-          targetContacts = group?.contacts.map(c => c.phone_number) || [];
+        const group = await prisma.contactGroup.findFirst({
+          where: { id: contact_source, user_id: userId },
+          include: { contacts: { select: { phone_number: true } } },
+        });
+        totalContacts = group?.contacts.length || 0;
+        targetContacts = group?.contacts.map((c) => c.phone_number) || [];
       }
-      
+
       // AUTO-SYNC NEW CONTACTS TO DATABASE
       if (targetContacts.length > 0) {
-          (async () => {
-              try {
-                  for (const num of targetContacts) {
-                      await prisma.contact.upsert({
-                          where: { 
-                              phone_number_user_id: { 
-                                  phone_number: num, 
-                                  user_id: userId 
-                              } 
-                          },
-                          update: {}, // Don't change existing
-                          create: {
-                              phone_number: num,
-                              user_id: userId,
-                              name: `Contact ${num.slice(-4)}`, // Placeholder name
-                              status: 'ACTIVE'
-                          }
-                      });
-                  }
-              } catch (err) {
-                  console.error('[Contact Auto-Sync Error]:', err);
-              }
-          })();
+        (async () => {
+          try {
+            for (const num of targetContacts) {
+              await prisma.contact.upsert({
+                where: {
+                  phone_number_user_id: {
+                    phone_number: num,
+                    user_id: userId,
+                  },
+                },
+                update: {}, // Don't change existing
+                create: {
+                  phone_number: num,
+                  user_id: userId,
+                  name: `Contact ${num.slice(-4)}`, // Placeholder name
+                  status: "ACTIVE",
+                },
+              });
+            }
+          } catch (err) {
+            console.error("[Contact Auto-Sync Error]:", err);
+          }
+        })();
       }
 
       const campaign = await prisma.campaign.create({
@@ -331,52 +375,61 @@ export class RcsController {
           name,
           template_name,
           type,
-          contact_source: contact_source || 'CUSTOM',
+          contact_source: contact_source || "CUSTOM",
           scheduled_at: scheduled_at ? new Date(scheduled_at) : null,
           status: scheduled_at ? CampaignStatus.SCHEDULED : CampaignStatus.LIVE,
           total_contacts: totalContacts,
-          namespace
-        }
+          namespace,
+        },
       });
 
       // TRIGGER SENDING IF LIVE
-      if (campaign.status === CampaignStatus.LIVE && targetContacts.length > 0) {
-          // Trigger in background to not block response
-          (async () => {
-              try {
-                  const config = await RcsController.getConfig(userId);
-                  // For RCS, we usually use the template name (function_name in MSG91) 
-                  // and pass the audience to 'to'
-                  const rcsRes = await rcsService.sendMessage({
-                      to: targetContacts.map(num => num.replace(/^\+/, '')),
-                      function_name: 'template', // To trigger a template on MSG91
-                      name: template_name,       // The internal name of your template
-                      namespace: namespace       // Required for template resolution
-                  }, config);
+      if (
+        campaign.status === CampaignStatus.LIVE &&
+        targetContacts.length > 0
+      ) {
+        // Trigger in background to not block response
+        (async () => {
+          try {
+            const config = await RcsController.getConfig(userId);
+            // For RCS, we usually use the template name (function_name in MSG91)
+            // and pass the audience to 'to'
+            const rcsRes = await rcsService.sendMessage(
+              {
+                to: targetContacts.map((num) => num.replace(/^\+/, "")),
+                function_name: "template", // To trigger a template on MSG91
+                name: template_name, // The internal name of your template
+                namespace: namespace, // Required for template resolution
+              },
+              config,
+            );
 
-                  // Update sent count and MSG91 requestId for tracking reports
-                  await prisma.campaign.update({
-                      where: { id: campaign.id },
-                      data: { 
-                          sent_count: targetContacts.length,
-                          msg91_request_id: rcsRes.result?.request_id || rcsRes.result?.data?.request_id || null
-                      }
-                  });
+            // Update sent count and MSG91 requestId for tracking reports
+            await prisma.campaign.update({
+              where: { id: campaign.id },
+              data: {
+                sent_count: targetContacts.length,
+                msg91_request_id:
+                  rcsRes.result?.request_id ||
+                  rcsRes.result?.data?.request_id ||
+                  null,
+              },
+            });
 
-                  // INITIALIZE 'SENT' EVENTS FOR ALL NUMBERS
-                  await prisma.campaignEvent.createMany({
-                      data: targetContacts.map(num => ({
-                          campaign_id: campaign.id,
-                          phone_number: num,
-                          event_type: RcsEventType.SENT
-                          // created_at is automatic
-                      })),
-                      skipDuplicates: true
-                  });
-              } catch (err) {
-                  console.error('[Campaign Background Send Error]:', err);
-              }
-          })();
+            // INITIALIZE 'SENT' EVENTS FOR ALL NUMBERS
+            await prisma.campaignEvent.createMany({
+              data: targetContacts.map((num) => ({
+                campaign_id: campaign.id,
+                phone_number: num,
+                event_type: RcsEventType.SENT,
+                // created_at is automatic
+              })),
+              skipDuplicates: true,
+            });
+          } catch (err) {
+            console.error("[Campaign Background Send Error]:", err);
+          }
+        })();
       }
 
       res.status(201).json({ success: true, campaign });
@@ -394,7 +447,7 @@ export class RcsController {
 
       const campaign = await prisma.campaign.updateMany({
         where: { id: campaignId, user_id: userId },
-        data: { status }
+        data: { status },
       });
 
       res.status(200).json({ success: true, message: "Campaign updated" });
@@ -407,9 +460,9 @@ export class RcsController {
   static async getVolumeData(req: Request, res: Response) {
     try {
       const userId = (req as any).user.id;
-      const { days = '30' } = req.query;
+      const { days = "30" } = req.query;
       const numDays = parseInt(days as string);
-      
+
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - numDays);
       startDate.setHours(0, 0, 0, 0);
@@ -430,16 +483,16 @@ export class RcsController {
       `;
 
       // Convert BigInt counts from PostgreSQL to Numbers for JSON serialization
-      const formattedData = volumeData.map(d => ({
+      const formattedData = volumeData.map((d) => ({
         day: d.day,
         sent: Number(d.sent),
         delivered: Number(d.delivered),
-        read: Number(d.read)
+        read: Number(d.read),
       }));
 
-      res.status(200).json({ 
-        success: true, 
-        data: formattedData 
+      res.status(200).json({
+        success: true,
+        data: formattedData,
       });
     } catch (err: any) {
       console.error(err);
@@ -448,57 +501,82 @@ export class RcsController {
   }
 
   static async getCampaignStats(req: Request, res: Response) {
-      try {
-          const userId = (req as any).user.id;
-          const { type, startDate, endDate, campaignId } = req.query;
-          
-          const where: any = { user_id: userId };
-          if (type && type !== 'all') where.type = type;
-          if (campaignId && campaignId !== 'all') where.id = campaignId;
-          if (startDate || endDate) {
-              where.created_at = {};
-              if (startDate) where.created_at.gte = new Date(startDate as string);
-              if (endDate) where.created_at.lte = new Date(endDate as string);
-          }
+    try {
+      const userId = (req as any).user.id;
+      const { type, startDate, endDate, campaignId } = req.query;
 
-          const campaigns = await prisma.campaign.findMany({ where });
-
-          const eventWhere: any = { campaign: { user_id: userId } };
-          if (type && type !== 'all') eventWhere.campaign.type = type;
-          if (campaignId && campaignId !== 'all') eventWhere.campaign_id = campaignId;
-          if (startDate || endDate) {
-              eventWhere.created_at = {};
-              if (startDate) eventWhere.created_at.gte = new Date(startDate as string);
-              if (endDate) eventWhere.created_at.lte = new Date(endDate as string);
-          }
-
-          // Aggregate simple dashboard stats from Event source of truth
-          const [totalEvents, totalDelivered, totalClicked, totalFailed, totalRead] = await Promise.all([
-            prisma.campaignEvent.count({ where: { ...eventWhere, sent_at: { not: null } } }),
-            prisma.campaignEvent.count({ where: { ...eventWhere, delivered_at: { not: null } } }),
-            prisma.campaignEvent.count({ where: { ...eventWhere, event_type: 'CLICKED' } }),
-            prisma.campaignEvent.count({ where: { ...eventWhere, event_type: 'FAILED' } }),
-            prisma.campaignEvent.count({ where: { ...eventWhere, read_at: { not: null } } })
-          ]);
-
-          const stats = {
-              total: campaigns.length,
-              live: campaigns.filter(c => c.status === CampaignStatus.LIVE || c.status === CampaignStatus.PARTIALLY_COMPLETED).length,
-              paused: campaigns.filter(c => c.status === CampaignStatus.PAUSED).length,
-              completed: campaigns.filter(c => c.status === CampaignStatus.COMPLETED).length,
-              audience: totalEvents,
-              delivered: totalDelivered,
-              read: Math.max(totalRead, totalClicked),
-              clicked: totalClicked,
-              failed: totalFailed,
-              avgClick: totalEvents > 0 ? (totalClicked / totalEvents) * 100 : 0
-          };
-
-          res.status(200).json({ success: true, stats });
-      } catch (err: any) {
-          console.error(err);
-          res.status(400).json({ success: false, message: err.message });
+      const where: any = { user_id: userId };
+      if (type && type !== "all") where.type = type;
+      if (campaignId && campaignId !== "all") where.id = campaignId;
+      if (startDate || endDate) {
+        where.created_at = {};
+        if (startDate) where.created_at.gte = new Date(startDate as string);
+        if (endDate) where.created_at.lte = new Date(endDate as string);
       }
+
+      const campaigns = await prisma.campaign.findMany({ where });
+
+      const eventWhere: any = { campaign: { user_id: userId } };
+      if (type && type !== "all") eventWhere.campaign.type = type;
+      if (campaignId && campaignId !== "all")
+        eventWhere.campaign_id = campaignId;
+      if (startDate || endDate) {
+        eventWhere.created_at = {};
+        if (startDate)
+          eventWhere.created_at.gte = new Date(startDate as string);
+        if (endDate) eventWhere.created_at.lte = new Date(endDate as string);
+      }
+
+      // Aggregate simple dashboard stats from Event source of truth
+      const [
+        totalEvents,
+        totalDelivered,
+        totalClicked,
+        totalFailed,
+        totalRead,
+      ] = await Promise.all([
+        prisma.campaignEvent.count({
+          where: { ...eventWhere, sent_at: { not: null } },
+        }),
+        prisma.campaignEvent.count({
+          where: { ...eventWhere, delivered_at: { not: null } },
+        }),
+        prisma.campaignEvent.count({
+          where: { ...eventWhere, event_type: "CLICKED" },
+        }),
+        prisma.campaignEvent.count({
+          where: { ...eventWhere, event_type: "FAILED" },
+        }),
+        prisma.campaignEvent.count({
+          where: { ...eventWhere, read_at: { not: null } },
+        }),
+      ]);
+
+      const stats = {
+        total: campaigns.length,
+        live: campaigns.filter(
+          (c) =>
+            c.status === CampaignStatus.LIVE ||
+            c.status === CampaignStatus.PARTIALLY_COMPLETED,
+        ).length,
+        paused: campaigns.filter((c) => c.status === CampaignStatus.PAUSED)
+          .length,
+        completed: campaigns.filter(
+          (c) => c.status === CampaignStatus.COMPLETED,
+        ).length,
+        audience: totalEvents,
+        delivered: totalDelivered,
+        read: Math.max(totalRead, totalClicked),
+        clicked: totalClicked,
+        failed: totalFailed,
+        avgClick: totalEvents > 0 ? (totalClicked / totalEvents) * 100 : 0,
+      };
+
+      res.status(200).json({ success: true, stats });
+    } catch (err: any) {
+      console.error(err);
+      res.status(400).json({ success: false, message: err.message });
+    }
   }
 
   static async resendCampaign(req: Request, res: Response) {
@@ -507,102 +585,120 @@ export class RcsController {
       const campaignId = req.params.id as string;
 
       const campaign = await prisma.campaign.findUnique({
-          where: { id: campaignId, user_id: userId }
+        where: { id: campaignId, user_id: userId },
       });
 
       if (!campaign) {
-          return res.status(404).json({ success: false, message: 'Campaign not found' });
+        return res
+          .status(404)
+          .json({ success: false, message: "Campaign not found" });
       }
 
       // Fetch contacts based on original source
       let targetContacts: string[] = [];
-      if (campaign.contact_source === 'ALL') {
-          const allUserContacts = await prisma.contact.findMany({ 
-              where: { user_id: userId, status: 'ACTIVE' }, 
-              select: { phone_number: true } 
-          });
-          targetContacts = allUserContacts.map(c => c.phone_number);
-      } else if (campaign.contact_source === 'CUSTOM' || campaign.contact_source === 'DEMO') {
-          const promotionalError = "Promotional messages are only allowed between 9 A.M. to 9 P.M.";
-          
-          const existingEvents = await prisma.campaignEvent.findMany({
-              where: { 
-                  campaign_id: campaign.id,
-                  OR: [
-                      { event_type: RcsEventType.SENT },
-                      { 
-                          event_type: RcsEventType.FAILED,
-                          error_details: { contains: promotionalError }
-                      }
-                  ]
+      if (campaign.contact_source === "ALL") {
+        const allUserContacts = await prisma.contact.findMany({
+          where: { user_id: userId, status: "ACTIVE" },
+          select: { phone_number: true },
+        });
+        targetContacts = allUserContacts.map((c) => c.phone_number);
+      } else if (
+        campaign.contact_source === "CUSTOM" ||
+        campaign.contact_source === "DEMO"
+      ) {
+        const promotionalError =
+          "Promotional messages are only allowed between 9 A.M. to 9 P.M.";
+
+        const existingEvents = await prisma.campaignEvent.findMany({
+          where: {
+            campaign_id: campaign.id,
+            OR: [
+              { event_type: RcsEventType.SENT },
+              {
+                event_type: RcsEventType.FAILED,
+                error_details: { contains: promotionalError },
               },
-              select: { phone_number: true },
-              distinct: ['phone_number']
-          });
-          targetContacts = existingEvents.map(e => e.phone_number);
+            ],
+          },
+          select: { phone_number: true },
+          distinct: ["phone_number"],
+        });
+        targetContacts = existingEvents.map((e) => e.phone_number);
       } else if (campaign.contact_source) {
-          const group = await prisma.contactGroup.findFirst({
-              where: { id: campaign.contact_source, user_id: userId },
-              include: { contacts: { select: { phone_number: true } } }
-          });
-          targetContacts = group?.contacts.map(c => c.phone_number) || [];
+        const group = await prisma.contactGroup.findFirst({
+          where: { id: campaign.contact_source, user_id: userId },
+          include: { contacts: { select: { phone_number: true } } },
+        });
+        targetContacts = group?.contacts.map((c) => c.phone_number) || [];
       }
 
       if (targetContacts.length === 0) {
-          return res.status(400).json({ success: false, message: 'No contacts found to resend to' });
+        return res
+          .status(400)
+          .json({ success: false, message: "No contacts found to resend to" });
       }
 
       (async () => {
-          try {
-              const config = await RcsController.getConfig(userId);
-              const rcsRes = await rcsService.sendMessage({
-                  to: targetContacts.map(num => num.replace(/^\+/, '')),
-                  function_name: 'template', // Consistent with createCampaign
-                  name: campaign.template_name,
-                  namespace: campaign.namespace || '' // Use existing if available
-              }, config);
+        try {
+          const config = await RcsController.getConfig(userId);
+          const rcsRes = await rcsService.sendMessage(
+            {
+              to: targetContacts.map((num) => num.replace(/^\+/, "")),
+              function_name: "template", // Consistent with createCampaign
+              name: campaign.template_name,
+              namespace: campaign.namespace || "", // Use existing if available
+            },
+            config,
+          );
 
-              // Update Campaign with latest requestId
-              await prisma.campaign.update({
-                  where: { id: campaign.id },
-                  data: {
-                      sent_count: { increment: targetContacts.length },
-                      msg91_request_id: rcsRes.result?.request_id || rcsRes.result?.data?.request_id || null
-                  }
-              });
+          // Update Campaign with latest requestId
+          await prisma.campaign.update({
+            where: { id: campaign.id },
+            data: {
+              sent_count: { increment: targetContacts.length },
+              msg91_request_id:
+                rcsRes.result?.request_id ||
+                rcsRes.result?.data?.request_id ||
+                null,
+            },
+          });
 
-              // Reset/Initialize 'SENT' status for these numbers
-              for (const phone of targetContacts) {
-                  await prisma.campaignEvent.upsert({
-                      where: {
-                          campaign_id_phone_number: {
-                              campaign_id: campaign.id,
-                              phone_number: phone
-                          }
-                      },
-                      update: {
-                          event_type: RcsEventType.SENT,
-                          error_details: null,
-                          status_updated_at: null,
-                          sent_at: null,
-                          delivered_at: null,
-                          read_at: null,
-                          engagement: null,
-                          created_at: new Date() // Record retry time
-                      },
-                      create: {
-                          campaign_id: campaign.id,
-                          phone_number: phone,
-                          event_type: RcsEventType.SENT
-                      }
-                  });
-              }
-          } catch (err) {
-              console.error('[Campaign Resend Error]:', err);
+          // Reset/Initialize 'SENT' status for these numbers
+          for (const phone of targetContacts) {
+            await prisma.campaignEvent.upsert({
+              where: {
+                campaign_id_phone_number: {
+                  campaign_id: campaign.id,
+                  phone_number: phone,
+                },
+              },
+              update: {
+                event_type: RcsEventType.SENT,
+                error_details: null,
+                status_updated_at: null,
+                sent_at: null,
+                delivered_at: null,
+                read_at: null,
+                engagement: null,
+                created_at: new Date(), // Record retry time
+              },
+              create: {
+                campaign_id: campaign.id,
+                phone_number: phone,
+                event_type: RcsEventType.SENT,
+              },
+            });
           }
+        } catch (err) {
+          console.error("[Campaign Resend Error]:", err);
+        }
       })();
 
-      res.json({ success: true, message: 'Resend triggered successfully', target_count: targetContacts.length });
+      res.json({
+        success: true,
+        message: "Resend triggered successfully",
+        target_count: targetContacts.length,
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
     }
@@ -614,35 +710,56 @@ export class RcsController {
       const campaignId = req.params.id as string;
 
       const campaign = await prisma.campaign.findUnique({
-        where: { id: campaignId, user_id: userId }
+        where: { id: campaignId, user_id: userId },
       });
 
       if (!campaign) {
-        return res.status(404).json({ success: false, message: 'Campaign not found' });
+        return res
+          .status(404)
+          .json({ success: false, message: "Campaign not found" });
       }
 
       // Total unique contacts that this campaign has targeted
       const totalSent = await prisma.campaignEvent.count({
-        where: { campaign_id: campaignId }
+        where: { campaign_id: campaignId },
       });
 
       // Lifecycle-based aggregate counting
-      const [sentCount, deliveredCount, readCount, clickedCount, failedCount, expiredCount] = await Promise.all([
-        prisma.campaignEvent.count({ where: { campaign_id: campaignId, sent_at: { not: null } } }),
-        prisma.campaignEvent.count({ where: { campaign_id: campaignId, delivered_at: { not: null } } }),
-        prisma.campaignEvent.count({ where: { campaign_id: campaignId, read_at: { not: null } } }),
-        prisma.campaignEvent.count({ where: { campaign_id: campaignId, event_type: RcsEventType.CLICKED } }),
-        prisma.campaignEvent.count({ where: { campaign_id: campaignId, event_type: RcsEventType.FAILED } }),
-        prisma.campaignEvent.count({ where: { campaign_id: campaignId, event_type: RcsEventType.EXPIRED } })
+      const [
+        sentCount,
+        deliveredCount,
+        readCount,
+        clickedCount,
+        failedCount,
+        expiredCount,
+      ] = await Promise.all([
+        prisma.campaignEvent.count({
+          where: { campaign_id: campaignId, sent_at: { not: null } },
+        }),
+        prisma.campaignEvent.count({
+          where: { campaign_id: campaignId, delivered_at: { not: null } },
+        }),
+        prisma.campaignEvent.count({
+          where: { campaign_id: campaignId, read_at: { not: null } },
+        }),
+        prisma.campaignEvent.count({
+          where: { campaign_id: campaignId, event_type: RcsEventType.CLICKED },
+        }),
+        prisma.campaignEvent.count({
+          where: { campaign_id: campaignId, event_type: RcsEventType.FAILED },
+        }),
+        prisma.campaignEvent.count({
+          where: { campaign_id: campaignId, event_type: RcsEventType.EXPIRED },
+        }),
       ]);
 
-      const counts = { 
-        SENT: sentCount, 
-        DELIVERED: deliveredCount, 
+      const counts = {
+        SENT: sentCount,
+        DELIVERED: deliveredCount,
         READ: Math.max(readCount, clickedCount), // Clicked implies read
-        CLICKED: clickedCount, 
-        FAILED: failedCount, 
-        EXPIRED: expiredCount 
+        CLICKED: clickedCount,
+        FAILED: failedCount,
+        EXPIRED: expiredCount,
       };
 
       res.status(200).json({ success: true, campaign, counts });
@@ -660,50 +777,52 @@ export class RcsController {
       const skip = (Number(page) - 1) * Number(limit);
 
       const eventWhere: any = { campaign_id: campaignId };
-      
-      if (status && status !== 'all') {
-          switch (status) {
-              case 'SENT':
-                  eventWhere.sent_at = { not: null };
-                  break;
-              case 'DELIVERED':
-                  eventWhere.delivered_at = { not: null };
-                  break;
-              case 'READ':
-                  eventWhere.OR = [
-                      { read_at: { not: null } },
-                      { event_type: 'CLICKED' }
-                  ];
-                  break;
-              case 'CLICKED':
-                  eventWhere.event_type = 'CLICKED';
-                  break;
-              case 'FAILED':
-                  eventWhere.event_type = 'FAILED';
-                  break;
-              case 'EXPIRED':
-                  eventWhere.event_type = 'EXPIRED';
-                  break;
-              default:
-                  eventWhere.event_type = status as string;
-          }
+
+      if (status && status !== "all") {
+        switch (status) {
+          case "SENT":
+            eventWhere.sent_at = { not: null };
+            break;
+          case "DELIVERED":
+            eventWhere.delivered_at = { not: null };
+            break;
+          case "READ":
+            eventWhere.OR = [
+              { read_at: { not: null } },
+              { event_type: "CLICKED" },
+            ];
+            break;
+          case "CLICKED":
+            eventWhere.event_type = "CLICKED";
+            break;
+          case "FAILED":
+            eventWhere.event_type = "FAILED";
+            break;
+          case "EXPIRED":
+            eventWhere.event_type = "EXPIRED";
+            break;
+          default:
+            eventWhere.event_type = status as string;
+        }
       }
-      
+
       if (search) {
-          eventWhere.phone_number = { contains: search as string };
+        eventWhere.phone_number = { contains: search as string };
       }
 
       const [events, total] = await Promise.all([
         prisma.campaignEvent.findMany({
-            where: eventWhere,
-            skip,
-            take: Number(limit),
-            orderBy: { created_at: 'desc' }
+          where: eventWhere,
+          skip,
+          take: Number(limit),
+          orderBy: { created_at: "desc" },
         }),
-        prisma.campaignEvent.count({ where: eventWhere })
+        prisma.campaignEvent.count({ where: eventWhere }),
       ]);
 
-      res.status(200).json({ success: true, events, total, page: Number(page) });
+      res
+        .status(200)
+        .json({ success: true, events, total, page: Number(page) });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
