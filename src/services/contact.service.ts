@@ -71,7 +71,7 @@ export class ContactService {
     }
 
     static async importContacts(userId: string, contactsData: any[]) {
-        const results = [];
+        const results: any[] = [];
         for (const contact of contactsData) {
             try {
                 const formattedPhone = formatPhoneNumber(contact.phone_number);
