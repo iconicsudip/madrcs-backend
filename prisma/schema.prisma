@@ -35,6 +35,7 @@ model User {
   template_drafts     TemplateDraft[]
   campaigns           Campaign[]
   activities          Activity[]
+  invoices            Invoice[]
 
   @@index([created_at])
   @@map("users")
@@ -222,4 +223,22 @@ model Activity {
   @@index([type])
   @@index([created_at])
   @@map("activities")
+}
+
+model Invoice {
+  id                  String   @id @default(uuid())
+  user_id             String
+  user                User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  amount              Float
+  status              String   @default("UNPAID") // UNPAID, PAID, CANCELLED
+  razorpay_order_id   String?
+  razorpay_payment_id String?
+  razorpay_link_id    String?
+  razorpay_link_url   String?
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  @@index([user_id])
+  @@index([status])
+  @@map("invoices")
 }
