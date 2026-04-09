@@ -79,9 +79,9 @@ router.put('/users/:userId/project-id', async (req, res) => {
 
 
 router.post('/approve-onboarding', async (req, res) => {
-    const { userId, planId, requestId } = req.body;
+    const { userId, planId, requestId, msg91ProjectId } = req.body;
     try {
-        await AdminService.approveUserOnboarding(userId, planId);
+        await AdminService.approveUserOnboarding(userId, planId, msg91ProjectId);
         if (requestId) {
             await AdminService.updateOnboardingRequest(requestId, 'APPROVED', 'Onboarding completed and plan assigned.');
         }

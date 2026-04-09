@@ -35,7 +35,7 @@ export class AdminService {
     });
   }
 
-  static async approveUserOnboarding(userId: string, planId: string) {
+  static async approveUserOnboarding(userId: string, planId: string, msg91ProjectId?: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error("User not found");
 
@@ -49,6 +49,7 @@ export class AdminService {
       data: {
         is_verified: true,
         credit_plan_id: planId,
+        msg91_project_id: msg91ProjectId
       },
     });
   }
