@@ -17,23 +17,28 @@ export class WebhookController {
             for (const event of events) {
                 // MSG91 reporting data
                 const { requestId, eventName, customerNumber, desc, statusUpdatedAt, countryName, countryCode, telecomCircle } = event;
-                const status = eventName?.toUpperCase();
+                let status = eventName?.toUpperCase();
 
-                if (!customerNumber || !status || status === 'SUBMITTED') continue;
+                if (!customerNumber || !status) continue;
+
+                // If status is submitted then consider as delivered
+                if (status === 'SUBMITTED') {
+                    status = RcsEventType.DELIVERED;
+                }
 
                 // Standardize number with +
                 const formattedNumber = customerNumber.startsWith('+') ? customerNumber : `+${customerNumber}`;
 
                 // 1. Find the campaign matching this MSG91 requestId
                 const campaign = await prisma.campaign.findFirst({
-                    where: { 
-                        msg91_request_id: requestId 
+                    where: {
+                        msg91_request_id: requestId
                     }
                 });
 
                 if (campaign) {
                     const statusDate = statusUpdatedAt ? new Date(statusUpdatedAt) : new Date();
-                    
+
                     const eventData: any = {
                         event_type: status,
                         error_details: desc || null,
@@ -75,8 +80,8 @@ export class WebhookController {
                         });
 
                         // 5. UPDATE CAMPAIGN STATUS: Check for completion
-                        const deliveredCount = await prisma.campaignEvent.count({ 
-                            where: { campaign_id: campaign.id, delivered_at: { not: null } } 
+                        const deliveredCount = await prisma.campaignEvent.count({
+                            where: { campaign_id: campaign.id, delivered_at: { not: null } }
                         });
 
                         let newStatus = campaign.status;
