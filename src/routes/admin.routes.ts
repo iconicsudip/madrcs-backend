@@ -66,6 +66,15 @@ router.post('/users', async (req, res) => {
     }
 });
 
+router.put('/users/:id', async (req, res) => {
+    try {
+        const user = await AdminService.updateUserByAdmin(req.params.id, req.body);
+        res.json({ success: true, user });
+    } catch (err: any) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
 router.put('/users/:userId/project-id', async (req, res) => {
     try {
         const { msg91_project_id } = req.body;

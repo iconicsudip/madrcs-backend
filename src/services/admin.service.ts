@@ -35,6 +35,42 @@ export class AdminService {
     });
   }
 
+  static async updateUserByAdmin(id: string, userData: any) {
+    const { full_name, email, phone_number, password, planId, credit_balance, msg91_project_id, is_verified } = userData;
+
+    const existingUser = await prisma.user.findUnique({ where: { id } });
+    if (!existingUser) throw new Error("User not found");
+
+    if (email && email !== existingUser.email) {
+      const emailExists = await prisma.user.findUnique({ where: { email } });
+      if (emailExists) throw new Error("Email already in use by another user");
+    }
+
+    const updateData: any = {
+      full_name,
+      email,
+      phone_number: phone_number ? formatPhoneNumber(phone_number) : undefined,
+      credit_plan_id: planId,
+      credit_balance: credit_balance !== undefined ? credit_balance : undefined,
+      msg91_project_id,
+      is_verified
+    };
+
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+      updateData.password = hashedPassword;
+    }
+
+    // Filter out undefined values to avoid Prisma errors if some fields aren't provided
+    Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
+    return await prisma.user.update({
+      where: { id },
+      data: updateData,
+    });
+  }
+
   static async approveUserOnboarding(userId: string, planId: string, msg91ProjectId?: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error("User not found");
