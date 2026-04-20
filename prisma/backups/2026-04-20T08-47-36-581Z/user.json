@@ -1,0 +1,71 @@
+[
+  {
+    "id": "d4a2bbe8-3774-406d-9292-9e3e0b09b70e",
+    "full_name": "Mad Marketer Admin",
+    "email": "admin@madrcs.net",
+    "phone_number": "+919999999999",
+    "password": "$2b$10$3BbRLnjDwglbyMMof0bKf.Tnt1wbPgQQpLlIqHphDyBZZkpc1H7fy",
+    "role": "admin",
+    "is_verified": true,
+    "created_at": "2026-04-20T08:41:30.791Z",
+    "bio": null,
+    "company_name": null,
+    "notification_pref": {
+      "low_credit": true,
+      "weekly_reports": false,
+      "campaign_alerts": true
+    },
+    "two_fact_enabled": false,
+    "two_fact_secret": null,
+    "recovery_codes": [],
+    "credit_plan_id": null,
+    "credit_balance": 1000000,
+    "msg91_project_id": null
+  },
+  {
+    "id": "e83c0561-6e6b-448f-be34-e95d8f7b657c",
+    "full_name": "Madmarketer",
+    "email": "mad@gmail.com",
+    "phone_number": "+919876543210",
+    "password": "$2b$10$Q0ZyNvKWKknOqoiYYx/yC.jQCMgVCPzhqA7YNoQTe2B4yZmA9oMjy",
+    "role": "user",
+    "is_verified": true,
+    "created_at": "2026-04-20T08:43:35.692Z",
+    "bio": null,
+    "company_name": null,
+    "notification_pref": {
+      "low_credit": true,
+      "weekly_reports": false,
+      "campaign_alerts": true
+    },
+    "two_fact_enabled": false,
+    "two_fact_secret": null,
+    "recovery_codes": [],
+    "credit_plan_id": "91cd3c6f-ef3d-4656-a90f-34e33d4e7602",
+    "credit_balance": 100000,
+    "msg91_project_id": "69c2503280cbf50614fdf9e2"
+  },
+  {
+    "id": "32c0bda5-0d58-4b6b-b0d2-011098c94607",
+    "full_name": "Pappu",
+    "email": "pappu@madtrader.net",
+    "phone_number": "+919876543210",
+    "password": "$2b$10$WpRB5ReGPMAx8lH4zlUyju6IfFMDSQlp8jSAayR7X.vzW/NuXzAoy",
+    "role": "user",
+    "is_verified": true,
+    "created_at": "2026-04-20T08:47:33.934Z",
+    "bio": null,
+    "company_name": null,
+    "notification_pref": {
+      "low_credit": true,
+      "weekly_reports": false,
+      "campaign_alerts": true
+    },
+    "two_fact_enabled": false,
+    "two_fact_secret": null,
+    "recovery_codes": [],
+    "credit_plan_id": "ade3eb4e-c3eb-41c3-b26d-6937d0b26d44",
+    "credit_balance": 50000,
+    "msg91_project_id": null
+  }
+]

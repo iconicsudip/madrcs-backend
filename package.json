@@ -8,16 +8,17 @@
     "dev": "nodemon src/index.ts",
     "build": "npx prisma generate && tsc",
     "migration:generate": "npx prisma migrate dev",
+    "migration:safe": "node prisma/safe-migrate.js",
     "migration:run": "npx prisma migrate deploy",
     "postinstall": "npx prisma generate",
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed": "npx prisma db seed",
     "pm2:start": "npm run build && npm run migration:run && pm2 start ecosystem.config.js",
     "pm2:start:prod": "npm run build && npm run migration:run && pm2 start ecosystem.config.js --env production",
-    "pm2:stop": "pm2 stop dochats-server",
-    "pm2:restart": "npm run build && npm run migration:run && pm2 restart dochats-server",
-    "pm2:delete": "pm2 delete dochats-server",
-    "pm2:logs": "pm2 logs dochats-server"
+    "pm2:stop": "pm2 stop madrcs-backend",
+    "pm2:restart": "npm run build && npm run migration:run && pm2 restart madrcs-backend",
+    "pm2:delete": "pm2 delete madrcs-backend",
+    "pm2:logs": "pm2 logs madrcs-backend"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

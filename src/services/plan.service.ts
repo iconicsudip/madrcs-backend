@@ -1,26 +1,50 @@
 import prisma from '../config/prisma';
 
 export class PlanService {
-    static async createPlan(data: { name: string, rate_per_message: number, min_credits?: number }) {
+    static async createPlan(data: { 
+        name: string, 
+        rate_per_message: number, 
+        min_credits?: number,
+        is_active?: boolean,
+        use_ios_surcharge?: boolean,
+        ios_rate_extra?: number
+    }) {
         return await prisma.creditPlan.create({
             data: {
                 name: data.name,
-                rate_per_message: data.rate_per_message,
-                min_credits: data.min_credits || 10000
+                rate_per_message: Number(data.rate_per_message),
+                min_credits: Number(data.min_credits || 10000),
+                is_active: data.is_active ?? true,
+                use_ios_surcharge: data.use_ios_surcharge || false,
+                ios_rate_extra: Number(data.ios_rate_extra || 0.10)
             }
         });
     }
 
-    static async getPlans() {
+    static async getPlans(onlyActive: boolean = false) {
+        const where = onlyActive ? { is_active: true } : {};
         return await prisma.creditPlan.findMany({
-            orderBy: { rate_per_message: 'asc' }
+            where,
+            orderBy: { created_at: 'desc' }
         });
     }
 
-    static async updatePlan(id: string, data: Partial<{ name: string, rate_per_message: number, min_credits: number }>) {
+    static async updatePlan(id: string, data: Partial<{ 
+        name: string, 
+        rate_per_message: number, 
+        min_credits: number,
+        is_active: boolean,
+        use_ios_surcharge: boolean,
+        ios_rate_extra: number
+    }>) {
         return await prisma.creditPlan.update({
             where: { id },
-            data
+            data: {
+                ...data,
+                rate_per_message: data.rate_per_message !== undefined ? Number(data.rate_per_message) : undefined,
+                min_credits: data.min_credits !== undefined ? Number(data.min_credits) : undefined,
+                ios_rate_extra: data.ios_rate_extra !== undefined ? Number(data.ios_rate_extra) : undefined
+            }
         });
     }
 

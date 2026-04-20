@@ -42,12 +42,14 @@ app.get('/health', (req, res) => {
 });
 
 // For development: run once on start after delay
+/*
 if (process.env.NODE_ENV !== 'production') {
     setTimeout(async () => {
         console.log('[Dev]: Seeding plans...');
         await PlanService.seedDefaultPlans();
     }, 5000);
 }
+*/
 
 app.listen(port, () => {
     console.log(`[server]: Server is running at http://localhost:${port}`);

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "ade3eb4e-c3eb-41c3-b26d-6937d0b26d44",
+    "name": "Pro Android + ios",
+    "rate_per_message": 0.25,
+    "min_credits": 100000,
+    "created_at": "2026-04-20T08:40:47.270Z",
+    "ios_rate_extra": 0.1,
+    "is_active": true,
+    "use_ios_surcharge": true
+  },
+  {
+    "id": "216b3616-8869-497b-9c48-9ed45052ce84",
+    "name": "Starter",
+    "rate_per_message": 0.3,
+    "min_credits": 25000,
+    "created_at": "2026-04-20T08:40:47.003Z",
+    "ios_rate_extra": 0,
+    "is_active": false,
+    "use_ios_surcharge": false
+  },
+  {
+    "id": "c816459e-973b-44dc-93a7-3ee821f9205d",
+    "name": "Basic Android ",
+    "rate_per_message": 0.28,
+    "min_credits": 50000,
+    "created_at": "2026-04-20T08:40:46.736Z",
+    "ios_rate_extra": 0,
+    "is_active": true,
+    "use_ios_surcharge": false
+  },
+  {
+    "id": "91cd3c6f-ef3d-4656-a90f-34e33d4e7602",
+    "name": "Pro Android ",
+    "rate_per_message": 0.25,
+    "min_credits": 100000,
+    "created_at": "2026-04-20T08:40:43.046Z",
+    "ios_rate_extra": 0,
+    "is_active": true,
+    "use_ios_surcharge": false
+  }
+]

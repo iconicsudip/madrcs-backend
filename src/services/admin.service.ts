@@ -51,7 +51,7 @@ export class AdminService {
       email,
       phone_number: phone_number ? formatPhoneNumber(phone_number) : undefined,
       credit_plan_id: planId,
-      credit_balance: credit_balance !== undefined ? credit_balance : undefined,
+      credit_balance: credit_balance !== undefined ? Number(credit_balance) : undefined,
       msg91_project_id,
       is_verified
     };

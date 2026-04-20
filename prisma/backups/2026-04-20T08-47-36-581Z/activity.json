@@ -1,0 +1,12 @@
+[
+  {
+    "id": "45f6d2e1-209c-438e-8cca-7926a7fe3f19",
+    "user_id": "d4a2bbe8-3774-406d-9292-9e3e0b09b70e",
+    "type": "LOGIN",
+    "title": "System Login",
+    "description": "Logged into the RCS Dashboard",
+    "metadata": null,
+    "color": "#3b82f6",
+    "created_at": "2026-04-20T08:42:10.951Z"
+  }
+]

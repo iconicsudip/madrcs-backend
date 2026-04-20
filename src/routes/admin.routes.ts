@@ -23,7 +23,8 @@ router.use(authenticate);
 // Credit Plans
 router.get('/plans', async (req, res) => {
     try {
-        const plans = await PlanService.getPlans();
+        const activeOnly = req.query.activeOnly === 'true';
+        const plans = await PlanService.getPlans(activeOnly);
         res.json({ success: true, plans });
     } catch (err: any) {
         res.status(400).json({ message: err.message });
