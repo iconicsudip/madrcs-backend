@@ -35,7 +35,7 @@ export class AuthService {
             }
         });
 
-        const { token, refreshToken } = await this.generateTokens(newUser.id);
+        const { token, refreshToken } = await this.generateTokens(newUser.id, newUser.role);
         
         const { password: _, ...userWithoutPassword } = newUser;
 
@@ -56,7 +56,7 @@ export class AuthService {
             return { mfaRequired: true, userId: user.id };
         }
 
-        const { token, refreshToken } = await this.generateTokens(user.id);
+        const { token, refreshToken } = await this.generateTokens(user.id, user.role);
         const { password: _, ...userWithoutPassword } = user;
 
         return { token, refreshToken, user: userWithoutPassword as any };
@@ -74,7 +74,7 @@ export class AuthService {
 
         if (!verified) throw new Error('Invalid verification code');
 
-        const { token: accessToken, refreshToken } = await this.generateTokens(user.id);
+        const { token: accessToken, refreshToken } = await this.generateTokens(user.id, user.role);
         const { password: _, ...userWithoutPassword } = user;
 
         return { token: accessToken, refreshToken, user: userWithoutPassword as any };
@@ -91,9 +91,12 @@ export class AuthService {
             throw new Error('Refresh token expired');
         }
 
+        const user = await prisma.user.findUnique({ where: { id: storedToken.user_id } });
+        if (!user) throw new Error('User not found');
+
         // Rotate token
         await prisma.refreshToken.delete({ where: { id: storedToken.id } });
-        return await this.generateTokens(storedToken.user_id);
+        return await this.generateTokens(storedToken.user_id, user.role);
     }
 
     static async getProfile(userId: string) {
@@ -125,8 +128,8 @@ export class AuthService {
         };
     }
 
-    private static async generateTokens(userId: string): Promise<{ token: string; refreshToken: string }> {
-        const token = jwt.sign({ id: userId }, this.JWT_SECRET, { expiresIn: this.ACCESS_TOKEN_EXPIRY });
+    private static async generateTokens(userId: string, role: string): Promise<{ token: string; refreshToken: string }> {
+        const token = jwt.sign({ id: userId, role }, this.JWT_SECRET, { expiresIn: this.ACCESS_TOKEN_EXPIRY });
         
         const refreshTokenStr = uuidv4();
         const expiresAt = new Date();

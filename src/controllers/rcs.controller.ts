@@ -146,24 +146,64 @@ export class RcsController {
 
   static async getActivity(req: Request, res: Response) {
     try {
-      const user = (req as any).user;
-      const { limit, userId: queryUserId } = req.query;
+      const authUser = (req as any).user;
+      const { page, limit, userId, search } = req.query;
 
-      let targetUserId = user.id;
+      const p = Number(page) || 1;
+      const l = Number(limit) || 20;
+      const skip = (p - 1) * l;
 
-      // Admins can query other users' activities
-      if (user.role === "admin" && queryUserId) {
-        targetUserId = queryUserId as string;
+      let where: any = {};
+
+      // If user is not admin, they can ONLY see their own activities
+      if (authUser.role !== 'admin') {
+        where.user_id = authUser.id;
+      } 
+      // If user is admin
+      else {
+        if (userId) {
+          where.user_id = userId as string;
+        }
+        // If no userId, admin sees everything (where = {})
       }
 
-      const activities = await prisma.activity.findMany({
-        where: { user_id: targetUserId },
-        orderBy: { created_at: "desc" },
-        take: limit ? parseInt(limit as string) : 100,
+      // Add search filter if present
+      if (search) {
+        where.OR = [
+          { title: { contains: search as string, mode: 'insensitive' } },
+          { description: { contains: search as string, mode: 'insensitive' } },
+          { user: { full_name: { contains: search as string, mode: 'insensitive' } } }
+        ];
+      }
+
+      const [activities, total] = await Promise.all([
+        prisma.activity.findMany({
+          where,
+          include: {
+            user: {
+              select: {
+                full_name: true,
+                email: true,
+                role: true
+              }
+            }
+          },
+          orderBy: { created_at: "desc" },
+          skip,
+          take: l,
+        }),
+        prisma.activity.count({ where })
+      ]);
+
+      res.status(200).json({ 
+        success: true, 
+        activities, 
+        total, 
+        page: p, 
+        limit: l 
       });
-      res.status(200).json({ success: true, activities });
     } catch (err: any) {
-      console.error(err);
+      console.error("[GetActivity Error]:", err);
       res.status(400).json({ success: false, message: err.message });
     }
   }
