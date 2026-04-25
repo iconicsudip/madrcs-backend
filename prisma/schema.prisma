@@ -34,6 +34,7 @@ model User {
   refresh_tokens      RefreshToken[]
   template_drafts     TemplateDraft[]
   invoices            Invoice[]
+  short_urls          ShortUrl[]
   credit_plan         CreditPlan?         @relation(fields: [credit_plan_id], references: [id])
 
   @@map("users")
@@ -214,6 +215,20 @@ model Invoice {
   @@index([user_id])
   @@index([status])
   @@map("invoices")
+}
+
+model ShortUrl {
+  id           String   @id @default(uuid())
+  original_url String   @unique
+  short_code   String   @unique
+  user_id      String?
+  clicks       Int      @default(0)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  user         User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([short_code])
+  @@map("short_urls")
 }
 
 

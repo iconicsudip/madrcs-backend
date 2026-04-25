@@ -8,6 +8,7 @@ import {
   RcsProviderConfig,
   SendMessagePayload,
 } from "../services/rcs/rcs.interface";
+import { ShortUrlService } from "../services/short-url.service";
 
 export class RcsController {
   private static async getConfig(userId: string): Promise<RcsProviderConfig> {
@@ -45,8 +46,13 @@ export class RcsController {
 
   static async createTemplate(req: Request, res: Response) {
     try {
-      const config = await RcsController.getConfig((req as any).user.id);
-      const payload = req.body as CreateTemplatePayload;
+      const userId = (req as any).user.id;
+      const config = await RcsController.getConfig(userId);
+      let payload = req.body as CreateTemplatePayload;
+
+      // Shorten URLs in payload
+      payload = await ShortUrlService.shortenUrlsInObject(payload, userId);
+
       const response = await rcsService.createTemplate(payload, config);
       res.status(200).json({ success: true, ...response });
     } catch (err: any) {
@@ -57,8 +63,13 @@ export class RcsController {
 
   static async sendMessage(req: Request, res: Response) {
     try {
-      const config = await RcsController.getConfig((req as any).user.id);
-      const payload = req.body as SendMessagePayload;
+      const userId = (req as any).user.id;
+      const config = await RcsController.getConfig(userId);
+      let payload = req.body as SendMessagePayload;
+
+      // Shorten URLs in payload
+      payload = await ShortUrlService.shortenUrlsInObject(payload, userId);
+
       const response = await rcsService.sendMessage(payload, config);
       res.status(200).json({ success: true, ...response });
     } catch (err: any) {

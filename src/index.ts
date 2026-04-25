@@ -13,6 +13,7 @@ import uploadRoutes from './routes/upload.routes';
 import publicRoutes from './routes/public.routes';
 import webhookRoutes from './routes/webhook.routes';
 import { PlanService } from './services/plan.service';
+import { ShortUrlController } from './controllers/short-url.controller';
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.get('/s/:shortCode', ShortUrlController.redirect);
 app.use('/api/auth', authRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/webhooks', webhookRoutes); // Publicly accessible for MSG91 reports

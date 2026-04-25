@@ -38,7 +38,7 @@ class AWSService {
             fileExtension = 'png';
         }
 
-        const env = process.env.NODE_ENV || 'development';
+        const env = 'development';
         const key = `rcs/${env}/media/${uuidv4()}.${fileExtension}`;
 
         const command = new PutObjectCommand({
