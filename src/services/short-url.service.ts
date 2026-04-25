@@ -67,16 +67,18 @@ export class ShortUrlService {
     return null;
   }
 
-  static async shortenUrlsInObject(obj: any, userId?: string): Promise<any> {
+  static async shortenUrlsInObject(obj: any, userId?: string, key?: string): Promise<any> {
     if (obj === null || obj === undefined) return obj;
 
     const baseUrl = process.env.BASE_URL || 'http://localhost:5001';
 
-    // If it's a string that looks like a URL, shorten it
+    // If it's a string that looks like a URL, shorten it ONLY if the key is 'url' and it's not an image
     if (typeof obj === 'string' && obj.startsWith('http')) {
-      // Only shorten if it's not already a short URL from our system
-      // We check for /s/ which is our pattern
-      if (!obj.includes('/s/')) {
+      // Basic check to see if the URL points to an image file
+      const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(obj.split('?')[0]);
+
+      // Only shorten if it's not already a short URL, the key is 'url', and it's NOT an image
+      if (key === 'url' && !obj.includes('/s/') && !isImage) {
         try {
           const shortCode = await this.getOrCreateShortUrl(obj, userId);
           return `${baseUrl}/s/${shortCode}`;
@@ -91,19 +93,19 @@ export class ShortUrlService {
     // If not an object or array, return as is
     if (typeof obj !== 'object') return obj;
 
-    // Handle arrays (recursively process each element)
+    // Handle arrays (recursively process each element, preserving the key)
     if (Array.isArray(obj)) {
       for (let i = 0; i < obj.length; i++) {
-        obj[i] = await this.shortenUrlsInObject(obj[i], userId);
+        obj[i] = await this.shortenUrlsInObject(obj[i], userId, key);
       }
       return obj;
     }
 
-    // Handle objects (recursively process each property)
+    // Handle objects (recursively process each property, passing the key)
     const newObj: any = {};
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        newObj[key] = await this.shortenUrlsInObject(obj[key], userId);
+    for (const k in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) {
+        newObj[k] = await this.shortenUrlsInObject(obj[k], userId, k);
       }
     }
     return newObj;
