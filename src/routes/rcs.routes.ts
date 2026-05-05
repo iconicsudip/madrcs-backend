@@ -2,12 +2,14 @@ import { Router } from 'express';
 import { RcsController } from '../controllers/rcs.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { checkCredits } from '../middleware/credit.middleware';
+import { ProviderConfigController } from '../controllers/provider-config.controller';
 
 const router = Router();
 
 // Apply auth middleware to protect all RCS routes
 router.use(authenticate);
 
+router.get('/provider-config', ProviderConfigController.getConfig);
 router.get('/templates', RcsController.getTemplates);
 router.post('/templates', RcsController.createTemplate);
 router.post('/send', checkCredits, RcsController.sendMessage);

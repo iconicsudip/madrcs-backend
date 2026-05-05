@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../config/prisma";
-import { CampaignStatus, RcsEventType } from "../enums/rcs.enum";
-import { rcsService } from "../services/rcs";
+import { CampaignStatus, RcsEventType, RcsProvider } from "../enums/rcs.enum";
+import { RcsServiceFactory } from "../services/rcs";
 import {
   CreateTemplatePayload,
   RcsLogParams,
@@ -29,6 +29,7 @@ export class RcsController {
     return {
       apiKey: apiKey,
       projectId: user.msg91_project_id,
+      provider: user.rcs_api as RcsProvider || RcsProvider.MSG91
     };
   }
 
@@ -36,7 +37,8 @@ export class RcsController {
     try {
       const config = await RcsController.getConfig((req as any).user.id);
       const status = req.query.status as string | undefined;
-      const response = await rcsService.getTemplates(config, status);
+      const service = RcsServiceFactory.getService(config.provider);
+      const response = await service.getTemplates(config, status);
       res.status(200).json({ success: true, ...response });
     } catch (err: any) {
       console.error(err);
@@ -53,7 +55,22 @@ export class RcsController {
       // Shorten URLs in payload
       payload = await ShortUrlService.shortenUrlsInObject(payload, userId);
 
-      const response = await rcsService.createTemplate(payload, config);
+      const service = RcsServiceFactory.getService(config.provider);
+      const response = await service.createTemplate(payload, config);
+
+      if (config.provider === 'google' || response.success) {
+        await prisma.rcsTemplate.create({
+          data: {
+            user_id: userId,
+            provider: config.provider,
+            name: payload.template_name,
+            category: (payload.function_name as string) || 'rich_card',
+            payload: payload.content as any,
+            status: 'APPROVED'
+          }
+        });
+      }
+
       res.status(200).json({ success: true, ...response });
     } catch (err: any) {
       console.error(err);
@@ -70,7 +87,8 @@ export class RcsController {
       // Shorten URLs in payload
       payload = await ShortUrlService.shortenUrlsInObject(payload, userId);
 
-      const response = await rcsService.sendMessage(payload, config);
+      const service = RcsServiceFactory.getService(config.provider);
+      const response = await service.sendMessage(payload, config);
       res.status(200).json({ success: true, ...response });
     } catch (err: any) {
       console.error(err);
@@ -88,7 +106,8 @@ export class RcsController {
         throw new Error("startDate and endDate are required");
       }
 
-      const response = await rcsService.getLogs(config, params);
+      const service = RcsServiceFactory.getService(config.provider);
+      const response = await service.getLogs(config, params);
       res.status(200).json({ success: true, ...response });
     } catch (err: any) {
       console.error(err);
@@ -445,7 +464,8 @@ export class RcsController {
             const config = await RcsController.getConfig(userId);
             // For RCS, we usually use the template name (function_name in MSG91)
             // and pass the audience to 'to'
-            const rcsRes = await rcsService.sendMessage(
+            const service = RcsServiceFactory.getService(config.provider);
+            const rcsRes = await service.sendMessage(
               {
                 to: targetContacts.map((num) => num.replace(/^\+/, "")),
                 function_name: "template", // To trigger a template on MSG91
@@ -692,7 +712,8 @@ export class RcsController {
       (async () => {
         try {
           const config = await RcsController.getConfig(userId);
-          const rcsRes = await rcsService.sendMessage(
+          const service = RcsServiceFactory.getService(config.provider);
+          const rcsRes = await service.sendMessage(
             {
               to: targetContacts.map((num) => num.replace(/^\+/, "")),
               function_name: "template", // Consistent with createCampaign

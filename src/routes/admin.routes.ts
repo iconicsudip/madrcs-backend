@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PlanService } from '../services/plan.service';
 import { AdminService } from '../services/admin.service';
 import { CreditController } from '../controllers/credit.controller';
+import { ProviderConfigController } from '../controllers/provider-config.controller';
 import { authenticate } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -114,5 +115,9 @@ router.get('/finance', async (req, res) => {
         res.status(400).json({ message: err.message });
     }
 });
+
+// Provider Config Settings
+router.get('/settings/providers', ProviderConfigController.getAllConfigs);
+router.put('/settings/providers/:provider', ProviderConfigController.updateConfig);
 
 export default router;

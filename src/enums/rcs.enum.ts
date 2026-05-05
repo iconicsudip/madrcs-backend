@@ -37,3 +37,8 @@ export enum CampaignStatus {
   SCHEDULED = 'SCHEDULED',
   DRAFT = 'DRAFT'
 }
+
+export enum RcsProvider {
+  MSG91 = 'msg91',
+  GOOGLE = 'google'
+}

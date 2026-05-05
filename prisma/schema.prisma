@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum RcsApiProvider {
+  msg91
+  google
+}
+
 model User {
   id                  String              @id @default(uuid())
   full_name           String
@@ -25,6 +30,7 @@ model User {
   credit_plan_id      String?
   credit_balance      Float               @default(0)
   msg91_project_id    String?
+  rcs_api             RcsApiProvider      @default(msg91)
   activities          Activity[]
   campaigns           Campaign[]
   contact_groups      ContactGroup[]
@@ -33,6 +39,7 @@ model User {
   onboarding_requests OnboardingRequest[]
   refresh_tokens      RefreshToken[]
   template_drafts     TemplateDraft[]
+  rcs_templates       RcsTemplate[]
   invoices            Invoice[]
   short_urls          ShortUrl[]
   credit_plan         CreditPlan?         @relation(fields: [credit_plan_id], references: [id])
@@ -133,6 +140,21 @@ model TemplateDraft {
   @@map("template_drafts")
 }
 
+model RcsTemplate {
+  id         String   @id @default(uuid())
+  user_id    String
+  provider   String   @default("google")
+  name       String
+  category   String
+  payload    Json
+  status     String   @default("APPROVED")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("rcs_templates")
+}
+
 model Campaign {
   id               String          @id @default(uuid())
   user_id          String
@@ -229,6 +251,15 @@ model ShortUrl {
 
   @@index([short_code])
   @@map("short_urls")
+}
+
+model ProviderConfig {
+  id                String   @id @default(uuid())
+  provider          String   @unique
+  allowed_templates String[]
+  updated_at        DateTime @updatedAt
+
+  @@map("provider_configs")
 }
 
 

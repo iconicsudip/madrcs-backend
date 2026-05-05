@@ -4,9 +4,20 @@ import { WebhookController } from '../controllers/webhook.controller';
 const router = Router();
 
 /**
- * Publicly accessible webhook for MSG91 RCS delivery reports.
- * Should be configured as its own route in entry (e.g., /api/webhooks).
+ * MSG91 RCS delivery reports.
  */
 router.post('/rcs/msg91', WebhookController.handleMsg91Rcs);
+
+/**
+ * Google RBM Events
+ * GET for verification, POST for events
+ */
+router.get('/rcs/google', WebhookController.verifyGoogleRcs);
+router.post('/rcs/google', WebhookController.handleGoogleRcs);
+
+/**
+ * Dotgo RCS delivery reports.
+ */
+router.post('/rcs/dotgo', WebhookController.handleDotgoRcs);
 
 export default router;
