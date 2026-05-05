@@ -2,7 +2,7 @@
 CREATE TYPE "RcsApiProvider" AS ENUM ('msg91', 'google');
 
 -- AlterTable
-ALTER TABLE "users" DROP COLUMN "rcs_api",
+ALTER TABLE "users" 
 ADD COLUMN     "rcs_api" "RcsApiProvider" NOT NULL DEFAULT 'msg91';
 
 -- CreateTable
