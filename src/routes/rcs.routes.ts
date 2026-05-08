@@ -17,11 +17,11 @@ router.get('/logs', RcsController.getLogs);
 
 // Draft templates
 router.post('/drafts', RcsController.saveDraft);
-router.get('/drafts', RcsController.getDrafts);
+
 router.delete('/drafts/:id', RcsController.deleteDraft);
 
 // Campaigns
-router.get('/campaigns/check-name', RcsController.checkCampaignName);
+
 router.get('/campaigns', RcsController.getCampaigns);
 router.post('/campaigns', checkCredits, RcsController.createCampaign);
 router.get('/campaigns/stats', RcsController.getCampaignStats);

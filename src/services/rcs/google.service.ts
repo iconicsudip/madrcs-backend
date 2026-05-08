@@ -195,6 +195,8 @@ export class GoogleRcsService implements IRcsService {
   async getTemplates(
     config: RcsProviderConfig,
     status?: string,
+    page?: number,
+    limit?: number,
   ): Promise<any> {
     console.log('[GoogleRcsService] Fetch templates not directly supported by basic RBM API without Management API.');
     return { success: true, provider: 'google', templates: [], count: 0 };

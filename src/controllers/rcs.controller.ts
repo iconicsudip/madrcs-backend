@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../config/prisma";
-import { CampaignStatus, RcsEventType, RcsProvider } from "../enums/rcs.enum";
+import { CampaignStatus, RcsEventType, RcsProvider, RcsTemplateStatus } from "../enums/rcs.enum";
 import { RcsServiceFactory } from "../services/rcs";
 import {
   CreateTemplatePayload,
@@ -35,11 +35,113 @@ export class RcsController {
 
   static async getTemplates(req: Request, res: Response) {
     try {
-      const config = await RcsController.getConfig((req as any).user.id);
-      const status = req.query.status as string | undefined;
+      const userId = (req as any).user.id;
+      const config = await RcsController.getConfig(userId);
+      const { status, page = 1, limit = 10, search } = req.query;
+      const p = Number(page);
+      const l = Number(limit);
+      const skip = (p - 1) * l;
+
+      let allTemplates: any[] = [];
+      let totalCount = 0;
+
       const service = RcsServiceFactory.getService(config.provider);
-      const response = await service.getTemplates(config, status);
-      res.status(200).json({ success: true, ...response });
+
+      // Handle 'Draft' status specifically from local DB
+      const isDraftRequested = status?.toString().toLowerCase() === 'draft' || status?.toString().toLowerCase() === 'drafts';
+      
+      if (isDraftRequested) {
+        const where: any = { user_id: userId };
+        if (search) {
+          where.name = { contains: search as string, mode: 'insensitive' };
+        }
+        const [drafts, total] = await Promise.all([
+          prisma.templateDraft.findMany({
+            where,
+            orderBy: { created_at: "desc" },
+            skip,
+            take: l,
+          }),
+          prisma.templateDraft.count({ where })
+        ]);
+        
+        allTemplates = drafts.map(d => ({
+          ...d,
+          template_name: d.name,
+          function_name: d.category,
+          status: RcsTemplateStatus.DRAFT,
+          isDraft: true
+        }));
+        totalCount = total;
+      } 
+      // Handle 'All' or specific API status
+      else if (status && status.toString().toLowerCase() !== 'all') {
+        // Specific API Status (APPROVED, PENDING, REJECTED)
+        const resTemplates = await service.getTemplates(config, status as string, p, l);
+        allTemplates = resTemplates.templates || resTemplates.result?.data || [];
+        totalCount = resTemplates.total || resTemplates.count || allTemplates.length;
+      }
+      else {
+        // 'All' Status - Merging API and Drafts with chained pagination
+        // Step 1: Get API templates and total API count
+        const apiRes = await service.getTemplates(config, undefined, p, l);
+        const apiList = apiRes.templates || apiRes.result?.data || [];
+        const apiTotal = apiRes.total || apiRes.count || apiList.length;
+        
+        // Step 2: Get total Draft count
+        const draftTotal = await prisma.templateDraft.count({ where: { user_id: userId } });
+        
+        totalCount = apiTotal + draftTotal;
+
+        // Step 3: Decide what to return based on page and limit
+        const apiCountInThisPage = apiList.length;
+        
+        if (apiCountInThisPage >= l) {
+          // Current page is fully satisfied by API templates
+          allTemplates = apiList;
+        } else if (apiCountInThisPage > 0) {
+          // Current page is partially satisfied by API, fill the rest with Drafts
+          const remainingLimit = l - apiCountInThisPage;
+          const drafts = await prisma.templateDraft.findMany({
+            where: { user_id: userId },
+            orderBy: { created_at: "desc" },
+            take: remainingLimit,
+            skip: 0
+          });
+          allTemplates = [...apiList, ...drafts.map(d => ({
+            ...d,
+            template_name: d.name,
+            function_name: d.category,
+            status: RcsTemplateStatus.DRAFT,
+            isDraft: true
+          }))];
+        } else {
+          // Current page is beyond API templates, fetch only from Drafts
+          // Calculate how many API templates were skipped
+          const draftSkip = (p - 1) * l - apiTotal;
+          const drafts = await prisma.templateDraft.findMany({
+            where: { user_id: userId },
+            orderBy: { created_at: "desc" },
+            take: l,
+            skip: Math.max(0, draftSkip)
+          });
+          allTemplates = drafts.map(d => ({
+            ...d,
+            template_name: d.name,
+            function_name: d.category,
+            status: RcsTemplateStatus.DRAFT,
+            isDraft: true
+          }));
+        }
+      }
+
+      res.status(200).json({ 
+        success: true, 
+        templates: allTemplates, 
+        total: totalCount,
+        page: p,
+        limit: l
+      });
     } catch (err: any) {
       console.error(err);
       res.status(400).json({ success: false, message: err.message });
@@ -141,19 +243,6 @@ export class RcsController {
     }
   }
 
-  static async getDrafts(req: Request, res: Response) {
-    try {
-      const userId = (req as any).user.id;
-      const drafts = await prisma.templateDraft.findMany({
-        where: { user_id: userId },
-        orderBy: { created_at: "desc" },
-      });
-      res.status(200).json({ success: true, drafts });
-    } catch (err: any) {
-      console.error(err);
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
 
   static async deleteDraft(req: Request, res: Response) {
     try {
@@ -238,33 +327,6 @@ export class RcsController {
     }
   }
 
-  static async checkCampaignName(req: Request, res: Response) {
-    try {
-      const userId = (req as any).user.id;
-      const { name } = req.query;
-
-      if (!name) {
-        return res.status(200).json({ success: true, available: true });
-      }
-
-      const existing = await prisma.campaign.findFirst({
-        where: {
-          user_id: userId,
-          name: {
-            equals: name as string,
-            mode: "insensitive", // Optional: allow case-insensitive check
-          },
-        },
-      });
-
-      res.status(200).json({
-        success: true,
-        available: !existing,
-      });
-    } catch (err: any) {
-      res.status(400).json({ success: false, message: err.message });
-    }
-  }
 
   // --- CAMPAIGN MANAGEMENT ---
 

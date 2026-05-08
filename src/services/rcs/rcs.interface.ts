@@ -94,7 +94,7 @@ export interface CreateTemplatePayload {
 
 export interface IRcsService {
   sendMessage(payload: SendMessagePayload, config: RcsProviderConfig): Promise<any>;
-  getTemplates(config: RcsProviderConfig, status?: string): Promise<any>;
+  getTemplates(config: RcsProviderConfig, status?: string, page?: number, limit?: number): Promise<any>;
   createTemplate(payload: CreateTemplatePayload, config: RcsProviderConfig): Promise<any>;
   getLogs(config: RcsProviderConfig, params: RcsLogParams): Promise<any>;
 }

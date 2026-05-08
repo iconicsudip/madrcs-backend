@@ -42,3 +42,10 @@ export enum RcsProvider {
   MSG91 = 'msg91',
   GOOGLE = 'google'
 }
+
+export enum RcsTemplateStatus {
+  APPROVED = 'APPROVED',
+  PENDING = 'PENDING',
+  REJECTED = 'REJECTED',
+  DRAFT = 'DRAFT'
+}

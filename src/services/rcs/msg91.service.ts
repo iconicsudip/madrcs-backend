@@ -55,8 +55,8 @@ export class Msg91RcsService implements IRcsService {
     }
   }
 
-  async getTemplates(config: RcsProviderConfig, status?: string): Promise<any> {
-    console.log('[MSG91 Service] Fetching templates with status:', status || 'all');
+  async getTemplates(config: RcsProviderConfig, status?: string, page?: number, limit?: number): Promise<any> {
+    console.log('[MSG91 Service] Fetching templates with status:', status || 'all', 'page:', page, 'limit:', limit);
 
     if (!config.apiKey || !config.projectId) {
       throw new Error("Msg91 Provider: API Key and Project ID are required in config.");
@@ -66,6 +66,8 @@ export class Msg91RcsService implements IRcsService {
     if (status) {
       endpoint += `&status=${status}`;
     }
+    if (page) endpoint += `&page=${page}`;
+    if (limit) endpoint += `&limit=${limit}`;
 
     try {
       const response = await axios.get(endpoint, {
