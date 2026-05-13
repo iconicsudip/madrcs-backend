@@ -109,72 +109,30 @@ export class WebhookController {
     }
 
     /**
-     * Google RBM Verification
+     * Handle JioCX RCS events
      */
-    static async verifyGoogleRcs(req: Request, res: Response) {
-        const clientToken = req.query.clientToken;
-        if (clientToken) {
-            return res.status(200).send(clientToken);
-        }
-        return res.status(400).send('Missing clientToken');
-    }
-
-    /**
-     * Handle Google RBM events
-     */
-    static async handleGoogleRcs(req: Request, res: Response) {
+    static async handleJiocxRcs(req: Request, res: Response) {
         try {
             const payload = req.body;
-            console.log('[Webhook] Received Google RBM Event:', JSON.stringify(payload));
+            console.log('[Webhook] Received JioCX RCS Event:', JSON.stringify(payload));
 
-            const event = payload; 
-            const { messageId, eventType, senderPhoneNumber, eventTime } = event;
+            const { messageId, status, phoneNumber, timestamp } = payload;
 
-            if (messageId && eventType) {
-                let status = eventType.toUpperCase();
-                const formattedNumber = senderPhoneNumber.startsWith('+') ? senderPhoneNumber : `+${senderPhoneNumber}`;
-
+            if (messageId && phoneNumber) {
+                const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
                 const campaign = await prisma.campaign.findFirst({
                     where: { msg91_request_id: messageId }
                 });
 
                 if (campaign) {
-                    const statusDate = eventTime ? new Date(eventTime) : new Date();
-                    await WebhookController.processProviderEvent(campaign, formattedNumber, status, statusDate);
+                    const statusDate = timestamp ? new Date(timestamp) : new Date();
+                    await WebhookController.processProviderEvent(campaign, formattedNumber, status?.toUpperCase() || 'UNKNOWN', statusDate);
                 }
             }
 
             res.status(200).json({ success: true });
         } catch (err: any) {
-            console.error('[Google Webhook Error]:', err.message);
-            res.status(500).json({ success: false });
-        }
-    }
-
-    /**
-     * Handle Dotgo RCS events
-     */
-    static async handleDotgoRcs(req: Request, res: Response) {
-        try {
-            const payload = req.body;
-            console.log('[Webhook] Received Dotgo RCS Event:', JSON.stringify(payload));
-
-            const { id, status, msisdn, timestamp } = payload;
-
-            if (id && msisdn) {
-                const formattedNumber = msisdn.startsWith('+') ? msisdn : `+${msisdn}`;
-                const campaign = await prisma.campaign.findFirst({
-                    where: { msg91_request_id: id }
-                });
-
-                if (campaign) {
-                    await WebhookController.processProviderEvent(campaign, formattedNumber, status.toUpperCase(), timestamp ? new Date(timestamp) : new Date());
-                }
-            }
-
-            res.status(200).json({ success: true });
-        } catch (err: any) {
-            console.error('[Dotgo Webhook Error]:', err.message);
+            console.error('[JioCX Webhook Error]:', err.message);
             res.status(500).json({ success: false });
         }
     }
@@ -232,5 +190,44 @@ export class WebhookController {
                 });
             }
         }
+    }
+
+    /**
+     * Generic endpoint to handle all providers dynamically based on the URL parameter
+     */
+    static async handleGenericRcs(req: Request, res: Response) {
+        const providerParam = req.params.provider;
+        const provider = typeof providerParam === 'string' ? providerParam.toLowerCase() : 
+                        (Array.isArray(providerParam) ? providerParam[0]?.toLowerCase() : undefined);
+        
+        switch (provider) {
+            case 'msg91':
+                await WebhookController.handleMsg91Rcs(req, res);
+                break;
+            case 'jiocx':
+                await WebhookController.handleJiocxRcs(req, res);
+                break;
+            default:
+                console.log(`[Webhook] Unhandled provider in generic route: ${provider}`);
+                console.log(`[Webhook] Payload:`, JSON.stringify(req.body));
+                res.status(200).json({ success: true, message: 'Webhook received for unknown provider' });
+        }
+    }
+
+    /**
+     * Generic GET endpoint for verification (e.g., Google RBM)
+     */
+    static async verifyGenericRcs(req: Request, res: Response) {
+        // Generic verification endpoint for providers that require GET verifications
+        res.status(200).send('OK');
+    }
+
+    /**
+     * Catch-all for unknown webhooks
+     */
+    static async handleUnknownWebhook(req: Request, res: Response) {
+        console.log(`[Unknown Webhook] ${req.method} ${req.originalUrl}`);
+        console.log(`[Unknown Webhook] Payload:`, JSON.stringify(req.body));
+        res.status(200).json({ success: true, message: 'Webhook received' });
     }
 }

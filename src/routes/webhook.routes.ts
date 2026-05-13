@@ -4,20 +4,14 @@ import { WebhookController } from '../controllers/webhook.controller';
 const router = Router();
 
 /**
- * MSG91 RCS delivery reports.
+ * Generic routes to handle all providers dynamically (/rcs/msg91, /rcs/jiocx)
  */
-router.post('/rcs/msg91', WebhookController.handleMsg91Rcs);
+router.get('/rcs/:provider', WebhookController.verifyGenericRcs);
+router.post('/rcs/:provider', WebhookController.handleGenericRcs);
 
 /**
- * Google RBM Events
- * GET for verification, POST for events
+ * Catch-all route for any other webhooks
  */
-router.get('/rcs/google', WebhookController.verifyGoogleRcs);
-router.post('/rcs/google', WebhookController.handleGoogleRcs);
-
-/**
- * Dotgo RCS delivery reports.
- */
-router.post('/rcs/dotgo', WebhookController.handleDotgoRcs);
+router.all('/*', WebhookController.handleUnknownWebhook);
 
 export default router;
