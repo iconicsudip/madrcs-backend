@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma';
 import { formatPhoneNumber } from '../utils/phone.util';
-
-const prisma = new PrismaClient();
 
 export class ContactService {
     static async getContacts(userId: string, query: any) {

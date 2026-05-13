@@ -12,6 +12,6 @@ router.post('/rcs/:provider', WebhookController.handleGenericRcs);
 /**
  * Catch-all route for any other webhooks
  */
-router.all('/*', WebhookController.handleUnknownWebhook);
+router.all('{*path}', WebhookController.handleUnknownWebhook);
 
 export default router;

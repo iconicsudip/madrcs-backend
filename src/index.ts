@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import authRoutes from './routes/auth.routes';
 import onboardingRoutes from './routes/onboarding.routes';
 import userRoutes from './routes/user.routes';
@@ -12,16 +12,16 @@ import rcsRoutes from './routes/rcs.routes';
 import uploadRoutes from './routes/upload.routes';
 import publicRoutes from './routes/public.routes';
 import webhookRoutes from './routes/webhook.routes';
-import { PlanService } from './services/plan.service';
 import { ShortUrlController } from './controllers/short-url.controller';
-
-dotenv.config();
+import prisma from './config/prisma';
 
 const app = express();
 const port = process.env.PORT || 5001;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: '*'
+}));
 app.use(express.json());
 
 // Routes
@@ -43,16 +43,20 @@ app.get('/health', (req, res) => {
     res.status(200).json({ status: 'up', message: 'API is running' });
 });
 
-// For development: run once on start after delay
-/*
-if (process.env.NODE_ENV !== 'production') {
-    setTimeout(async () => {
-        console.log('[Dev]: Seeding plans...');
-        await PlanService.seedDefaultPlans();
-    }, 5000);
-}
-*/
+async function bootstrap() {
+    try {
+        // Verify DB connection on startup
+        await prisma.$connect();
+        console.log('[DB]: Database connected successfully');
 
-app.listen(port, () => {
-    console.log(`[server]: Server is running at http://localhost:${port}`);
-});
+        app.listen(port, () => {
+            console.log(`[server]: Server is running at http://localhost:${port}`);
+        });
+    } catch (err: any) {
+        console.error('[DB]: Failed to connect to the database:', err.message);
+        process.exit(1);
+    }
+}
+
+bootstrap();
+
