@@ -37,6 +37,7 @@ export interface SendMessagePayload {
   ttl?: string | number;
   namespace?: string;
   name?: string;
+  template_id?: string;
   customer_number_variables?: any[];
   image_urls?: string[];
   titles?: string[];
@@ -63,6 +64,7 @@ export interface RcsLogParams {
 }
 
 export interface CreateTemplatePayload {
+  id?: string;
   template_name: string;
   function_name: RcsFunctionName | string;
   ttl?: string | number;
@@ -97,4 +99,7 @@ export interface IRcsService {
   getTemplates(config: RcsProviderConfig, status?: string, page?: number, limit?: number): Promise<any>;
   createTemplate(payload: CreateTemplatePayload, config: RcsProviderConfig): Promise<any>;
   getLogs(config: RcsProviderConfig, params: RcsLogParams): Promise<any>;
+  /** Check RCS capability for one or more phone numbers (JioCX-only for now) */
+  checkCapability?(phoneNumbers: string | string[], config: RcsProviderConfig): Promise<any>;
+  campaignPrecheck?(phoneNumbers: string[], config: RcsProviderConfig): Promise<any>;
 }

@@ -17,7 +17,18 @@ export class AdminService {
   }
 
   static async createUserByAdmin(userData: any) {
-    const { full_name, email, phone_number, password, planId, credit_balance, rcs_api } =
+    const {
+      full_name,
+      email,
+      phone_number,
+      password,
+      planId,
+      credit_balance,
+      rcs_api,
+      msg91_project_id,
+      jiocx_api_key,
+      jiocx_project_id,
+    } =
       userData;
 
     const userExists = await prisma.user.findUnique({ where: { email } });
@@ -35,6 +46,9 @@ export class AdminService {
         password: hashedPassword,
         credit_plan_id: planId,
         credit_balance: credit_balance || 0,
+        msg91_project_id,
+        jiocx_api_key,
+        jiocx_project_id,
         rcs_api: rcs_api || RcsProvider.MSG91,
         is_verified: true, // Admin created users are verified by default
         role: "user",
@@ -43,7 +57,19 @@ export class AdminService {
   }
 
   static async updateUserByAdmin(id: string, userData: any) {
-    const { full_name, email, phone_number, password, planId, credit_balance, msg91_project_id, is_verified, rcs_api } = userData;
+    const {
+      full_name,
+      email,
+      phone_number,
+      password,
+      planId,
+      credit_balance,
+      msg91_project_id,
+      jiocx_api_key,
+      jiocx_project_id,
+      is_verified,
+      rcs_api,
+    } = userData;
 
     const existingUser = await prisma.user.findUnique({ where: { id } });
     if (!existingUser) throw new Error("User not found");
@@ -60,6 +86,8 @@ export class AdminService {
       credit_plan_id: planId,
       credit_balance: credit_balance !== undefined ? Number(credit_balance) : undefined,
       msg91_project_id,
+      jiocx_api_key,
+      jiocx_project_id,
       rcs_api,
       is_verified
     };

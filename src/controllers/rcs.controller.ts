@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
+import { Prisma } from "@prisma/client";
 import prisma from "../config/prisma";
-import { CampaignStatus, RcsEventType, RcsProvider, RcsTemplateStatus } from "../enums/rcs.enum";
+import { CampaignStatus, RcsEventType, RcsProvider, RcsTemplateStatus, RcsFunctionName } from "../enums/rcs.enum";
 import { RcsServiceFactory } from "../services/rcs";
 import {
   CreateTemplatePayload,
@@ -8,10 +9,37 @@ import {
   RcsProviderConfig,
   SendMessagePayload,
 } from "../services/rcs/rcs.interface";
+import { CapabilityResultRow } from "../services/rcs/jiocx.service";
 import { ShortUrlService } from "../services/short-url.service";
 
+import { formatPhoneNumber } from "../utils/phone.util";
+
 export class RcsController {
+  private static readonly CONTACT_SYNC_BATCH_SIZE = 50;
+
   private static async getConfig(userId: string): Promise<RcsProviderConfig> {
+    const user = (await prisma.user.findUnique({ where: { id: userId } })) as any;
+    if (!user) {
+      throw new Error("User not found.");
+    }
+
+    const provider = (user.rcs_api as RcsProvider) || RcsProvider.MSG91;
+
+    if (provider === RcsProvider.JIOCX) {
+      if (!user.jiocx_api_key || !user.jiocx_project_id) {
+        throw new Error(
+          "Your account is missing JioCX credentials. Please contact admin to configure your JioCX API key and project ID.",
+        );
+      }
+      return {
+        apiKey: user.jiocx_api_key,
+        projectId: user.jiocx_project_id,
+        provider: RcsProvider.JIOCX,
+        userId: userId,
+      };
+    }
+
+    // Default to MSG91
     const apiKey = process.env.MSG91_API_KEY;
     if (!apiKey) {
       throw new Error(
@@ -19,8 +47,7 @@ export class RcsController {
       );
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.msg91_project_id) {
+    if (!user.msg91_project_id) {
       throw new Error(
         "Your account is missing an RCS Project ID. Please contact support.",
       );
@@ -29,8 +56,135 @@ export class RcsController {
     return {
       apiKey: apiKey,
       projectId: user.msg91_project_id,
-      provider: user.rcs_api as RcsProvider || RcsProvider.MSG91
+      provider: provider,
+      userId: userId,
     };
+  }
+
+  /**
+   * Build a JioCX config from the authenticated user's stored credentials.
+   * jiocx_project_id is used as the JioCX agentId header value.
+   */
+  private static async getJiocxConfig(userId: string): Promise<RcsProviderConfig> {
+    const jiocxCredentialSelect: any = {
+      jiocx_api_key: true,
+      jiocx_project_id: true,
+    };
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: jiocxCredentialSelect,
+    }) as any;
+
+    if (!user?.jiocx_api_key || !user?.jiocx_project_id) {
+      throw new Error(
+        "Your account is missing JioCX credentials. Please contact admin to configure your JioCX API key and project ID.",
+      );
+    }
+
+    return {
+      apiKey: user.jiocx_api_key,
+      projectId: user.jiocx_project_id,
+      provider: RcsProvider.JIOCX,
+    };
+  }
+
+  private static sanitizeCapabilityInput(phoneNumbers: unknown): string | string[] {
+    if (typeof phoneNumbers === "string") {
+      const normalizedPhone = formatPhoneNumber(phoneNumbers);
+      if (!normalizedPhone) {
+        throw new Error("phoneNumbers cannot be empty.");
+      }
+      return normalizedPhone;
+    }
+
+    if (!Array.isArray(phoneNumbers)) {
+      throw new Error("phoneNumbers must be a string (single) or an array of strings (bulk).");
+    }
+
+    const normalizedPhones = phoneNumbers
+      .map((phone) => {
+        if (typeof phone !== "string") {
+          throw new Error("Each phone number must be a string.");
+        }
+        return formatPhoneNumber(phone);
+      })
+      .filter(Boolean);
+
+    if (normalizedPhones.length === 0) {
+      throw new Error("phoneNumbers array cannot be empty.");
+    }
+
+    return normalizedPhones;
+  }
+
+  private static async syncCapabilityContacts(userId: string, rows: CapabilityResultRow[]) {
+    const dedupedRows = Array.from(
+      new Map(
+        rows
+          .filter((row) => Boolean(row.phoneNumber))
+          .map((row) => [row.phoneNumber, row]),
+      ).values(),
+    );
+
+    const summary = {
+      processed: dedupedRows.length,
+      rcsEnabled: 0,
+      rcsDisabled: 0,
+      unknown: 0,
+    };
+
+    for (const row of dedupedRows) {
+      if (row.rcsCapable === true) {
+        summary.rcsEnabled += 1;
+      } else if (row.rcsCapable === false) {
+        summary.rcsDisabled += 1;
+      } else {
+        summary.unknown += 1;
+      }
+    }
+
+    // Process upserts in the background without blocking the response
+    (async () => {
+      for (let i = 0; i < dedupedRows.length; i += RcsController.CONTACT_SYNC_BATCH_SIZE) {
+        const batch = dedupedRows.slice(i, i + RcsController.CONTACT_SYNC_BATCH_SIZE);
+        try {
+          await prisma.$transaction(
+            batch.map((row) => {
+              const updateData = {
+                rcs_capable: row.rcsCapable,
+              } as unknown as Prisma.ContactUpdateInput;
+
+              const createData = {
+                phone_number: row.phoneNumber,
+                user_id: userId,
+                name: `Contact ${row.phoneNumber.slice(-4)}`,
+                status: "ACTIVE",
+                rcs_capable: row.rcsCapable,
+              } as unknown as Prisma.ContactUncheckedCreateInput;
+
+              return prisma.contact.upsert({
+                where: {
+                  phone_number_user_id: {
+                    phone_number: row.phoneNumber,
+                    user_id: userId,
+                  },
+                },
+                update: updateData,
+                create: createData,
+              });
+            }),
+            {
+              timeout: 30000,
+            }
+          );
+        } catch (err: any) {
+          console.error(`[Background Contact Sync Batch Error]:`, err.message);
+        }
+      }
+    })().catch((err) => console.error("[Background Contact Sync Error]:", err.message));
+
+    return summary;
   }
 
   static async getTemplates(req: Request, res: Response) {
@@ -49,16 +203,17 @@ export class RcsController {
 
       // Handle 'Draft' status specifically from local DB
       const isDraftRequested = status?.toString().toLowerCase() === 'draft' || status?.toString().toLowerCase() === 'drafts';
+      const isDeletedRequested = status?.toString().toLowerCase() === 'deleted';
       
       if (isDraftRequested) {
-        const where: any = { user_id: userId };
+        const where: any = { user_id: userId, deleted_at: null };
         if (search) {
           where.name = { contains: search as string, mode: 'insensitive' };
         }
         const [drafts, total] = await Promise.all([
           prisma.templateDraft.findMany({
             where,
-            orderBy: { created_at: "desc" },
+            orderBy: { created_at: "desc" } as any,
             skip,
             take: l,
           }),
@@ -70,10 +225,43 @@ export class RcsController {
           template_name: d.name,
           function_name: d.category,
           status: RcsTemplateStatus.DRAFT,
-          isDraft: true
+          isDraft: true,
+          provider: config.provider // Include current provider for drafts
         }));
         totalCount = total;
       } 
+      else if (isDeletedRequested) {
+        // Fetch soft-deleted templates and drafts
+        const [deletedTemplates, deletedDrafts] = await Promise.all([
+          prisma.rcsTemplate.findMany({
+            where: { user_id: userId, deleted_at: { not: null } } as any,
+            orderBy: { deleted_at: "desc" } as any
+          }),
+          prisma.templateDraft.findMany({
+            where: { user_id: userId, deleted_at: { not: null } } as any,
+            orderBy: { deleted_at: "desc" } as any
+          })
+        ]);
+
+        const mappedTemplates = deletedTemplates.map(t => ({
+          ...t,
+          template_name: t.name,
+          function_name: t.category,
+          isDeleted: true
+        }));
+
+        const mappedDrafts = deletedDrafts.map(d => ({
+          ...d,
+          template_name: d.name,
+          function_name: d.category,
+          status: RcsTemplateStatus.DRAFT,
+          isDraft: true,
+          isDeleted: true
+        }));
+
+        allTemplates = [...mappedTemplates, ...mappedDrafts];
+        totalCount = allTemplates.length;
+      }
       // Handle 'All' or specific API status
       else if (status && status.toString().toLowerCase() !== 'all') {
         // Specific API Status (APPROVED, PENDING, REJECTED)
@@ -89,7 +277,7 @@ export class RcsController {
         const apiTotal = apiRes.total || apiRes.count || apiList.length;
         
         // Step 2: Get total Draft count
-        const draftTotal = await prisma.templateDraft.count({ where: { user_id: userId } });
+        const draftTotal = await prisma.templateDraft.count({ where: { user_id: userId, deleted_at: null } as any });
         
         totalCount = apiTotal + draftTotal;
 
@@ -103,8 +291,8 @@ export class RcsController {
           // Current page is partially satisfied by API, fill the rest with Drafts
           const remainingLimit = l - apiCountInThisPage;
           const drafts = await prisma.templateDraft.findMany({
-            where: { user_id: userId },
-            orderBy: { created_at: "desc" },
+            where: { user_id: userId, deleted_at: null } as any,
+            orderBy: { created_at: "desc" } as any,
             take: remainingLimit,
             skip: 0
           });
@@ -113,15 +301,16 @@ export class RcsController {
             template_name: d.name,
             function_name: d.category,
             status: RcsTemplateStatus.DRAFT,
-            isDraft: true
+            isDraft: true,
+            provider: config.provider
           }))];
         } else {
           // Current page is beyond API templates, fetch only from Drafts
           // Calculate how many API templates were skipped
           const draftSkip = (p - 1) * l - apiTotal;
           const drafts = await prisma.templateDraft.findMany({
-            where: { user_id: userId },
-            orderBy: { created_at: "desc" },
+            where: { user_id: userId, deleted_at: null } as any,
+            orderBy: { created_at: "desc" } as any,
             take: l,
             skip: Math.max(0, draftSkip)
           });
@@ -130,7 +319,8 @@ export class RcsController {
             template_name: d.name,
             function_name: d.category,
             status: RcsTemplateStatus.DRAFT,
-            isDraft: true
+            isDraft: true,
+            provider: config.provider
           }));
         }
       }
@@ -160,20 +350,94 @@ export class RcsController {
       const service = RcsServiceFactory.getService(config.provider);
       const response = await service.createTemplate(payload, config);
 
-      if (config.provider === 'google' || response.success) {
-        await prisma.rcsTemplate.create({
-          data: {
-            user_id: userId,
-            provider: config.provider,
-            name: payload.template_name,
-            category: (payload.function_name as string) || 'rich_card',
-            payload: payload.content as any,
-            status: 'APPROVED'
-          }
-        });
+      if (response.success) {
+        if (payload.id) {
+          // Update existing template
+          await prisma.rcsTemplate.update({
+            where: { id: payload.id },
+            data: {
+              name: payload.template_name,
+              category: (payload.function_name as string) || RcsFunctionName.RICH_CARD,
+              payload: payload.content as any,
+              status: 'APPROVED'
+            }
+          });
+        } else {
+          // Create new template
+          await prisma.rcsTemplate.create({
+            data: {
+              user_id: userId,
+              provider: config.provider,
+              name: payload.template_name,
+              category: (payload.function_name as string) || RcsFunctionName.RICH_CARD,
+              payload: payload.content as any,
+              status: 'APPROVED'
+            }
+          });
+        }
       }
 
       res.status(200).json({ success: true, ...response });
+    } catch (err: any) {
+      console.error(err);
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async deleteTemplate(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.id;
+      const templateId = req.params.id as string;
+
+      // Only allow deleting templates that belong to the user
+      const template = await prisma.rcsTemplate.findFirst({
+        where: { id: templateId, user_id: userId }
+      });
+
+      if (!template) {
+        throw new Error("Template not found or unauthorized");
+      }
+
+      if ((template as any).deleted_at) {
+        // Permanent delete if already soft-deleted
+        await prisma.rcsTemplate.delete({
+          where: { id: templateId }
+        });
+        return res.status(200).json({ success: true, message: "Template permanently deleted" });
+      }
+
+      // Soft delete
+      await prisma.rcsTemplate.update({
+        where: { id: templateId },
+        data: { deleted_at: new Date() } as any
+      });
+
+      res.status(200).json({ success: true, message: "Template moved to trash" });
+    } catch (err: any) {
+      console.error(err);
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async restoreTemplate(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.id;
+      const templateId = req.params.id as string;
+
+      const template = await prisma.rcsTemplate.findFirst({
+        where: { id: templateId, user_id: userId }
+      });
+
+      if (!template) {
+        throw new Error("Template not found or unauthorized");
+      }
+
+      await prisma.rcsTemplate.update({
+        where: { id: templateId },
+        data: { deleted_at: null } as any
+      });
+
+      res.status(200).json({ success: true, message: "Template restored successfully" });
     } catch (err: any) {
       console.error(err);
       res.status(400).json({ success: false, message: err.message });
@@ -222,20 +486,32 @@ export class RcsController {
   static async saveDraft(req: Request, res: Response) {
     try {
       const userId = (req as any).user.id;
-      const { name, category, payload } = req.body;
+      const { id, name, category, payload } = req.body;
 
       if (!name || !payload) {
         throw new Error("Draft name and payload are required");
       }
 
-      const draft = await prisma.templateDraft.create({
-        data: {
-          user_id: userId,
-          name,
-          category,
-          payload,
-        },
-      });
+      let draft;
+      if (id) {
+        draft = await prisma.templateDraft.update({
+          where: { id, user_id: userId },
+          data: {
+            name,
+            category,
+            payload,
+          },
+        });
+      } else {
+        draft = await prisma.templateDraft.create({
+          data: {
+            user_id: userId,
+            name,
+            category,
+            payload,
+          },
+        });
+      }
       res.status(201).json({ success: true, draft });
     } catch (err: any) {
       console.error(err);
@@ -249,14 +525,54 @@ export class RcsController {
       const userId = (req as any).user.id;
       const draftId = req.params.id as string;
 
-      await prisma.templateDraft.deleteMany({
-        where: {
-          id: draftId,
-          user_id: userId,
-        },
+      const draft = await prisma.templateDraft.findFirst({
+        where: { id: draftId, user_id: userId }
       });
 
-      res.status(200).json({ success: true, message: "Draft deleted" });
+      if (!draft) {
+        throw new Error("Draft not found or unauthorized");
+      }
+
+      if ((draft as any).deleted_at) {
+        // Permanent delete
+        await prisma.templateDraft.delete({
+          where: { id: draftId }
+        });
+        return res.status(200).json({ success: true, message: "Draft permanently deleted" });
+      }
+
+      // Soft delete
+      await prisma.templateDraft.update({
+        where: { id: draftId },
+        data: { deleted_at: new Date() } as any
+      });
+
+      res.status(200).json({ success: true, message: "Draft moved to trash" });
+    } catch (err: any) {
+      console.error(err);
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async restoreDraft(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.id;
+      const draftId = req.params.id as string;
+
+      const draft = await prisma.templateDraft.findFirst({
+        where: { id: draftId, user_id: userId }
+      });
+
+      if (!draft) {
+        throw new Error("Draft not found or unauthorized");
+      }
+
+      await prisma.templateDraft.update({
+        where: { id: draftId },
+        data: { deleted_at: null } as any
+      });
+
+      res.status(200).json({ success: true, message: "Draft restored successfully" });
     } catch (err: any) {
       console.error(err);
       res.status(400).json({ success: false, message: err.message });
@@ -341,6 +657,7 @@ export class RcsController {
         startDate,
         endDate,
         campaignId,
+        messageId,
       } = req.query;
       const skip = (Number(page) - 1) * Number(limit);
 
@@ -354,6 +671,9 @@ export class RcsController {
       }
       if (campaignId && campaignId !== "all") {
         where.id = campaignId;
+      }
+      if (messageId) {
+        where.request_id = messageId;
       }
       if (startDate || endDate) {
         where.created_at = {};
@@ -441,6 +761,7 @@ export class RcsController {
       const {
         name,
         template_name,
+        template_id,
         namespace,
         type,
         contact_source,
@@ -506,13 +827,14 @@ export class RcsController {
           user_id: userId,
           name,
           template_name,
+          template_id,
           type,
           contact_source: contact_source || "CUSTOM",
           scheduled_at: scheduled_at ? new Date(scheduled_at) : null,
           status: scheduled_at ? CampaignStatus.SCHEDULED : CampaignStatus.LIVE,
           total_contacts: totalContacts,
           namespace,
-        },
+        } as any,
       });
 
       // TRIGGER SENDING IF LIVE
@@ -532,21 +854,23 @@ export class RcsController {
                 to: targetContacts.map((num) => num.replace(/^\+/, "")),
                 function_name: "template", // To trigger a template on MSG91
                 name: template_name, // The internal name of your template
+                template_id: template_id, // For JioCX lookup
                 namespace: namespace, // Required for template resolution
               },
               config,
             );
 
-            // Update sent count and MSG91 requestId for tracking reports
+            // Update sent count and request ID for tracking reports
             await prisma.campaign.update({
               where: { id: campaign.id },
               data: {
                 sent_count: targetContacts.length,
-                msg91_request_id:
+                request_id:
+                  rcsRes.messageID ||
                   rcsRes.result?.request_id ||
                   rcsRes.result?.data?.request_id ||
                   null,
-              },
+              } as any,
             });
 
             // INITIALIZE 'SENT' EVENTS FOR ALL NUMBERS
@@ -636,11 +960,12 @@ export class RcsController {
   static async getCampaignStats(req: Request, res: Response) {
     try {
       const userId = (req as any).user.id;
-      const { type, startDate, endDate, campaignId } = req.query;
+      const { type, startDate, endDate, campaignId, messageId } = req.query;
 
       const where: any = { user_id: userId };
       if (type && type !== "all") where.type = type;
       if (campaignId && campaignId !== "all") where.id = campaignId;
+      if (messageId) where.request_id = messageId;
       if (startDate || endDate) {
         where.created_at = {};
         if (startDate) where.created_at.gte = new Date(startDate as string);
@@ -653,6 +978,7 @@ export class RcsController {
       if (type && type !== "all") eventWhere.campaign.type = type;
       if (campaignId && campaignId !== "all")
         eventWhere.campaign_id = campaignId;
+      if (messageId) eventWhere.campaign.request_id = messageId;
       if (startDate || endDate) {
         eventWhere.created_at = {};
         if (startDate)
@@ -780,6 +1106,7 @@ export class RcsController {
               to: targetContacts.map((num) => num.replace(/^\+/, "")),
               function_name: "template", // Consistent with createCampaign
               name: campaign.template_name,
+              template_id: (campaign as any).template_id, // Added template_id for resend
               namespace: campaign.namespace || "", // Use existing if available
             },
             config,
@@ -790,11 +1117,11 @@ export class RcsController {
             where: { id: campaign.id },
             data: {
               sent_count: { increment: targetContacts.length },
-              msg91_request_id:
+              request_id:
                 rcsRes.result?.request_id ||
                 rcsRes.result?.data?.request_id ||
                 null,
-            },
+            } as any,
           });
 
           // Reset/Initialize 'SENT' status for these numbers
@@ -958,6 +1285,171 @@ export class RcsController {
         .status(200)
         .json({ success: true, events, total, page: Number(page) });
     } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  // ------------------------------------------------------------------ //
+  //  JioCX – Number Capability Check
+  // ------------------------------------------------------------------ //
+
+  /**
+   * POST /api/rcs/check-capability
+   *
+   * Body:
+   *   { "phoneNumbers": "+919800000000" }              ← single (string)
+   *   { "phoneNumbers": ["+91980...", "+91981...", ...] } ← bulk (array, 500–10000+)
+   *
+   * Rules enforced here:
+   *   - Array length < 500   → reject with 400
+   *   - Array length > 10000 → chunked automatically inside JiocxRcsService
+   */
+  static async checkCapability(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.id;
+      const { phoneNumbers } = req.body;
+
+      if (phoneNumbers === undefined || phoneNumbers === null) {
+        return res.status(400).json({
+          success: false,
+          message: 'phoneNumbers is required in the request body.',
+        });
+      }
+
+      const sanitizedPhoneNumbers = RcsController.sanitizeCapabilityInput(phoneNumbers);
+
+      // Validate array constraints
+      if (Array.isArray(sanitizedPhoneNumbers)) {
+        if (sanitizedPhoneNumbers.length < 500) {
+          return res.status(400).json({
+            success: false,
+            message:
+              `Bulk mode requires at least 500 numbers (received ${sanitizedPhoneNumbers.length}). ` +
+              'For a single number pass a string, not an array.',
+          });
+        }
+      }
+
+      const config  = await RcsController.getJiocxConfig(userId);
+      const service = RcsServiceFactory.getService(RcsProvider.JIOCX);
+
+      if (!service.checkCapability) {
+        return res.status(501).json({
+          success: false,
+          message: 'checkCapability is not supported by this provider.',
+        });
+      }
+
+      const result = await service.checkCapability(sanitizedPhoneNumbers, config);
+      const contactSync = await RcsController.syncCapabilityContacts(userId, result.rows || []);
+      res.status(200).json({ ...result, contactSync });
+    } catch (err: any) {
+      console.error('[checkCapability Error]:', err.message);
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async campaignPrecheck(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.id;
+      const { phoneNumbers } = req.body;
+
+      if (!Array.isArray(phoneNumbers)) {
+        return res.status(400).json({
+          success: false,
+          message: 'phoneNumbers must be an array of strings.',
+        });
+      }
+
+      const sanitizedPhoneNumbers = RcsController.sanitizeCapabilityInput(phoneNumbers);
+      const config  = await RcsController.getJiocxConfig(userId);
+      const service = RcsServiceFactory.getService(RcsProvider.JIOCX);
+
+      if (!service.campaignPrecheck) {
+        return res.status(501).json({
+          success: false,
+          message: 'campaignPrecheck is not supported by this provider.',
+        });
+      }
+
+      const result = await service.campaignPrecheck(sanitizedPhoneNumbers as string[], config);
+      const contactSync = await RcsController.syncCapabilityContacts(userId, result.rows || []);
+      res.status(200).json({ ...result, contactSync });
+    } catch (err: any) {
+      console.error('[campaignPrecheck Error]:', err.message);
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async getUserMessages(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.id;
+      const { page = 1, limit = 10, phoneNumber } = req.query;
+      const p = parseInt(page as string);
+      const l = parseInt(limit as string);
+      const skip = (p - 1) * l;
+
+      const where: any = { user_id: userId };
+      if (phoneNumber) {
+        where.phone_number = { contains: phoneNumber as string };
+      }
+
+      const [messages, total] = await Promise.all([
+        (prisma as any).userMessage.findMany({
+          where,
+          orderBy: { created_at: 'desc' },
+          skip,
+          take: l,
+        }),
+        (prisma as any).userMessage.count({ where })
+      ]);
+
+      res.status(200).json({
+        success: true,
+        messages,
+        total,
+        page: p,
+        limit: l
+      });
+    } catch (err: any) {
+      console.error('[GetUserMessages Error]:', err.message);
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  static async getConversations(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.id;
+      const { search } = req.query;
+
+      // Use raw SQL for grouping unique phone numbers with their latest message
+      // We use Prisma.sql to build the query safely
+      const searchCondition = search
+        ? Prisma.sql`AND phone_number LIKE ${`%${search}%`}`
+        : Prisma.empty;
+      
+      const conversations: any[] = await prisma.$queryRaw`
+        SELECT DISTINCT ON (phone_number)
+          id,
+          phone_number,
+          text,
+          suggestion_data,
+          created_at
+        FROM user_messages
+        WHERE user_id = ${userId}
+        ${searchCondition}
+        ORDER BY phone_number, created_at DESC
+      `;
+
+      // Sort by latest message overall
+      conversations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      res.status(200).json({
+        success: true,
+        conversations
+      });
+    } catch (err: any) {
+      console.error('[GetConversations Error]:', err.message);
       res.status(400).json({ success: false, message: err.message });
     }
   }

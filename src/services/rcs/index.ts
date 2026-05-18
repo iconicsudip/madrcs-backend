@@ -1,12 +1,12 @@
 import { IRcsService } from './rcs.interface';
 import { Msg91RcsService } from './msg91.service';
-import { GoogleRcsService } from './google.service';
+import { JiocxRcsService } from './jiocx.service';
 import { RcsProvider } from '../../enums/rcs.enum';
 
 export class RcsServiceFactory {
   static getService(provider: string | RcsProvider): IRcsService {
-    if (provider === RcsProvider.GOOGLE) {
-      return new GoogleRcsService();
+    if (provider === RcsProvider.JIOCX) {
+      return new JiocxRcsService();
     }
     return new Msg91RcsService();
   }
@@ -17,4 +17,4 @@ export const rcsService = RcsServiceFactory.getService(RcsProvider.MSG91);
 
 export * from './rcs.interface';
 export * from '../../enums/rcs.enum';
-
+export * from './jiocx.service';

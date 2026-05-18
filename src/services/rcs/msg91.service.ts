@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { RcsProvider, RcsFunctionName } from '../../enums/rcs.enum';
 import { IRcsService, RcsProviderConfig, SendCampaignPayload, SendMessagePayload, RcsLogParams, CreateTemplatePayload } from './rcs.interface';
 
 export class Msg91RcsService implements IRcsService {
@@ -48,10 +49,10 @@ export class Msg91RcsService implements IRcsService {
         }
       });
       
-      return { success: true, provider: 'msg91', result: response.data };
+      return { success: true, provider: RcsProvider.MSG91, result: response.data };
     } catch (error: any) {
       console.error('[MSG91 Send Error]:', error?.response?.data || error.message);
-      return { success: false, provider: 'msg91', error: error?.response?.data || error.message };
+      return { success: false, provider: RcsProvider.MSG91, error: error?.response?.data || error.message };
     }
   }
 
@@ -91,22 +92,23 @@ export class Msg91RcsService implements IRcsService {
           content: tpl.content,
           project_id: tpl.project_id,
           created_at: tpl.created_at,
-          vendor: tpl.vendor
+          vendor: tpl.vendor,
+          provider: RcsProvider.MSG91
         }));
 
         return { 
           success: true, 
-          provider: 'msg91', 
+          provider: RcsProvider.MSG91, 
           templates: mappedTemplates,
           count: msg91Data.data.template_count,
           total: msg91Data.data.total_template_count
         };
       }
       
-      return { success: true, provider: 'msg91', templates: [], count: 0 };
+      return { success: true, provider: RcsProvider.MSG91, templates: [], count: 0 };
     } catch (error: any) {
       console.error('[MSG91 Fetch Template Error]:', error?.response?.data || error.message);
-      return { success: false, provider: 'msg91', error: error?.response?.data || error.message };
+      return { success: false, provider: RcsProvider.MSG91, error: error?.response?.data || error.message };
     }
   }
 
@@ -123,9 +125,9 @@ export class Msg91RcsService implements IRcsService {
     const { function_name, content, ...rest } = payload;
     let msg91FunctionName = function_name;
     
-    // Map 'text_with_actions' back to 'suggested_replies' for MSG91
-    if (function_name === 'text_with_actions') {
-      msg91FunctionName = 'suggested_replies';
+    // Map RcsFunctionName.TEXT_WITH_ACTIONS back to RcsFunctionName.SUGGESTED_REPLIES for MSG91
+    if (function_name === RcsFunctionName.TEXT_WITH_ACTIONS) {
+      msg91FunctionName = RcsFunctionName.SUGGESTED_REPLIES;
     }
 
     const msg91Payload: any = {
@@ -143,10 +145,10 @@ export class Msg91RcsService implements IRcsService {
         }
       });
       
-      return { success: true, provider: 'msg91', result: response.data };
+      return { success: true, provider: RcsProvider.MSG91, result: response.data };
     } catch (error: any) {
       console.error('[MSG91 Create Template Error]:', error?.response?.data || error.message);
-      return { success: false, provider: 'msg91', error: error?.response?.data || error.message };
+      return { success: false, provider: RcsProvider.MSG91, error: error?.response?.data || error.message };
     }
   }
 
@@ -182,10 +184,10 @@ export class Msg91RcsService implements IRcsService {
         }
       });
       
-      return { success: true, provider: 'msg91', result: response.data };
+      return { success: true, provider: RcsProvider.MSG91, result: response.data };
     } catch (error: any) {
       console.error('[MSG91 Fetch Logs Error]:', error?.response?.data || error.message);
-      return { success: false, provider: 'msg91', error: error?.response?.data || error.message };
+      return { success: false, provider: RcsProvider.MSG91, error: error?.response?.data || error.message };
     }
   }
 }

@@ -9,7 +9,8 @@ export enum RcsFunctionName {
   CALENDAR_EVENT = 'calendar_event',
   CAROUSEL = 'carousel',
   CUSTOMER_NUMBER_VARIABLES = 'customer_number_variables',
-  TEXT_MESSAGE = 'text_message'
+  TEXT_MESSAGE = 'text_message',
+  TEXT_WITH_ACTIONS = 'text_with_actions'
 }
 
 export enum RcsActionType {
@@ -26,7 +27,11 @@ export enum RcsEventType {
   READ = 'READ',
   CLICKED = 'CLICKED',
   FAILED = 'FAILED',
-  EXPIRED = 'EXPIRED'
+  EXPIRED = 'EXPIRED',
+  SUCCESS = 'SUCCESS',
+  REACHABLE = 'REACHABLE',
+  UNREACHABLE = 'UNREACHABLE',
+  REVOKED = 'REVOKED'
 }
 
 export enum CampaignStatus {
@@ -40,7 +45,7 @@ export enum CampaignStatus {
 
 export enum RcsProvider {
   MSG91 = 'msg91',
-  GOOGLE = 'google'
+  JIOCX = 'jiocx'
 }
 
 export enum RcsTemplateStatus {

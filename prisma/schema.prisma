@@ -8,7 +8,7 @@ datasource db {
 
 enum RcsApiProvider {
   msg91
-  google
+  jiocx
 }
 
 model User {
@@ -29,7 +29,9 @@ model User {
   credit_plan_id      String?
   credit_balance      Float               @default(0)
   msg91_project_id    String?
-  rcs_api             RcsApiProvider      @default(msg91)
+  jiocx_api_key       String?
+  jiocx_project_id    String?
+  rcs_api             RcsApiProvider      @default(jiocx)
   activities          Activity[]
   campaigns           Campaign[]
   contact_groups      ContactGroup[]
@@ -39,6 +41,7 @@ model User {
   refresh_tokens      RefreshToken[]
   template_drafts     TemplateDraft[]
   rcs_templates       RcsTemplate[]
+  user_messages       UserMessage[]
   invoices            Invoice[]
   short_urls          ShortUrl[]
   credit_plan         CreditPlan?         @relation(fields: [credit_plan_id], references: [id])
@@ -105,6 +108,7 @@ model Contact {
   status       String   @default("ACTIVE")
   user_id      String
   created_at   DateTime @default(now())
+  rcs_capable  Boolean?
   groups       ContactGroup[] @relation("ContactToGroup")
   user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -134,6 +138,7 @@ model TemplateDraft {
   payload    Json
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+  deleted_at DateTime?
   user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("template_drafts")
@@ -142,13 +147,14 @@ model TemplateDraft {
 model RcsTemplate {
   id         String   @id @default(uuid())
   user_id    String
-  provider   String   @default("google")
+  provider   String   @default("jiocx")
   name       String
   category   String
   payload    Json
   status     String   @default("APPROVED")
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+  deleted_at DateTime?
   user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("rcs_templates")
@@ -159,6 +165,7 @@ model Campaign {
   user_id          String
   name             String
   template_name    String
+  template_id      String?
   type             String
   status           String          @default("LIVE")
   contact_source   String?
@@ -167,7 +174,7 @@ model Campaign {
   sent_count       Int             @default(0)
   created_at       DateTime        @default(now())
   updated_at       DateTime        @updatedAt
-  msg91_request_id String?
+  request_id       String?
   namespace        String?
   events           CampaignEvent[]
   user             User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
@@ -259,6 +266,24 @@ model ProviderConfig {
   updated_at        DateTime @updatedAt
 
   @@map("provider_configs")
+}
+
+model UserMessage {
+  id                String   @id @default(uuid())
+  user_id           String?
+  message_id        String?
+  reference_id      String?
+  phone_number      String
+  text              String?
+  suggestion_data   Json?
+  entity_type       String?
+  created_at        DateTime @default(now())
+  
+  user              User?    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([phone_number])
+  @@index([user_id])
+  @@map("user_messages")
 }
 
 

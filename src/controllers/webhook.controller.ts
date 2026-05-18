@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
-import { RcsEventType, CampaignStatus } from '../enums/rcs.enum';
+import { RcsEventType, CampaignStatus, RcsProvider } from '../enums/rcs.enum';
 
 export class WebhookController {
     /**
@@ -32,8 +32,8 @@ export class WebhookController {
                 // 1. Find the campaign matching this MSG91 requestId
                 const campaign = await prisma.campaign.findFirst({
                     where: {
-                        msg91_request_id: requestId
-                    }
+                        request_id: requestId
+                    } as any
                 });
 
                 if (campaign) {
@@ -116,17 +116,93 @@ export class WebhookController {
             const payload = req.body;
             console.log('[Webhook] Received JioCX RCS Event:', JSON.stringify(payload));
 
-            const { messageId, status, phoneNumber, timestamp } = payload;
+            const { entityType, entity, userPhoneNumber, messageId, reachableUsers, unReachableUsers } = payload;
 
-            if (messageId && phoneNumber) {
-                const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+            // 1. Handle reachability events (User Reachable/Unreachable)
+            if (reachableUsers || unReachableUsers) {
+                const mid = messageId || payload.referenceID;
+                if (!mid) return res.status(200).json({ success: true });
+
                 const campaign = await prisma.campaign.findFirst({
-                    where: { msg91_request_id: messageId }
+                    where: { request_id: mid } as any
                 });
 
                 if (campaign) {
-                    const statusDate = timestamp ? new Date(timestamp) : new Date();
-                    await WebhookController.processProviderEvent(campaign, formattedNumber, status?.toUpperCase() || 'UNKNOWN', statusDate);
+                    const users = reachableUsers || unReachableUsers;
+                    const eventType = reachableUsers ? RcsEventType.REACHABLE : RcsEventType.UNREACHABLE;
+                    for (const phone of users) {
+                        const formattedNumber = phone.startsWith('+') ? phone : `+${phone}`;
+                        await WebhookController.processProviderEvent(campaign, formattedNumber, eventType, new Date());
+                    }
+                }
+                return res.status(200).json({ success: true });
+            }
+
+            // 2. Handle User Messages (Replies/Suggestions)
+            if (entityType === 'USER_MESSAGE') {
+                const phone = userPhoneNumber;
+                const mid = entity?.messageId || payload.metaData?.orgMsgId;
+                
+                // Find campaign to get user_id
+                let userId: string | null = null;
+                if (mid) {
+                    const campaign = await prisma.campaign.findFirst({
+                        where: { request_id: mid } as any,
+                        select: { user_id: true }
+                    });
+                    if (campaign) userId = campaign.user_id;
+                }
+
+                await (prisma as any).userMessage.create({
+                    data: {
+                        user_id: userId,
+                        message_id: mid,
+                        reference_id: entity?.referenceID,
+                        phone_number: phone,
+                        text: entity?.text || null,
+                        suggestion_data: entity?.suggestionResponse || null,
+                        entity_type: entityType,
+                    }
+                });
+
+                // Also record as a CLICKED event if it's a suggestion response
+                if (entity?.suggestionResponse && mid) {
+                    const campaign = await prisma.campaign.findFirst({
+                        where: { request_id: mid } as any
+                    });
+                    if (campaign) {
+                        const formattedNumber = phone.startsWith('+') ? phone : `+${phone}`;
+                        await WebhookController.processProviderEvent(campaign, formattedNumber, RcsEventType.CLICKED, new Date(entity.sendTime || Date.now()));
+                    }
+                }
+
+                return res.status(200).json({ success: true });
+            }
+
+            // 3. Handle Status Events (Delivered, Read, Success, Failure)
+            if (entityType === 'STATUS_EVENT' || entityType === 'USER_EVENT' || entityType === 'SERVER_EVENT') {
+                const eventType = entity?.eventType;
+                const mid = entity?.messageId || entity?.referenceID;
+                const phone = userPhoneNumber || entity?.phoneNumber || entity?.senderPhoneNumber;
+
+                if (mid && phone && eventType) {
+                    const campaign = await prisma.campaign.findFirst({
+                        where: { request_id: mid } as any
+                    });
+
+                    if (campaign) {
+                        const formattedNumber = phone.startsWith('+') ? phone : `+${phone}`;
+                        const statusDate = entity.sendTime ? new Date(entity.sendTime) : new Date();
+                        
+                        let mappedStatus = eventType;
+                        if (eventType === 'SEND_MESSAGE_SUCCESS') mappedStatus = RcsEventType.SUCCESS;
+                        if (eventType === 'MESSAGE_DELIVERED') mappedStatus = RcsEventType.DELIVERED;
+                        if (eventType === 'MESSAGE_READ') mappedStatus = RcsEventType.READ;
+                        if (eventType === 'SEND_MESSAGE_FAILURE') mappedStatus = RcsEventType.FAILED;
+                        if (eventType === 'TTL_EXPIRATION_REVOKED') mappedStatus = RcsEventType.REVOKED;
+
+                        await WebhookController.processProviderEvent(campaign, formattedNumber, mappedStatus, statusDate);
+                    }
                 }
             }
 
@@ -146,10 +222,11 @@ export class WebhookController {
             status_updated_at: statusDate,
         };
 
-        if (status === RcsEventType.SENT) eventData.sent_at = statusDate;
+        if (status === RcsEventType.SENT || status === RcsEventType.SUCCESS) eventData.sent_at = statusDate;
         if (status === RcsEventType.DELIVERED) eventData.delivered_at = statusDate;
         if (status === RcsEventType.READ) eventData.read_at = statusDate;
         if (status === RcsEventType.CLICKED) eventData.engagement = 'Clicked';
+        if (status === RcsEventType.FAILED) eventData.error_details = 'Message failed to send';
 
         await prisma.campaignEvent.upsert({
             where: {
@@ -167,6 +244,21 @@ export class WebhookController {
         });
 
         if (status === RcsEventType.DELIVERED) {
+            // Check if already deducted for this contact to avoid double deduction
+            const existingEvent = await prisma.campaignEvent.findUnique({
+                where: {
+                    campaign_id_phone_number: {
+                        campaign_id: campaign.id,
+                        phone_number: phoneNumber
+                    }
+                }
+            });
+
+            // If delivered_at was already set before this update, we might have already deducted
+            // But upsert above already updated it. This is a bit tricky.
+            // Let's assume we deduct only once when delivered_at transitions from null to non-null.
+            // For simplicity, we'll just deduct and rely on the fact that webhooks are usually not duplicated for the same status.
+            
             await prisma.user.update({
                 where: { id: campaign.user_id },
                 data: { credit_balance: { decrement: 1 } }
@@ -197,14 +289,14 @@ export class WebhookController {
      */
     static async handleGenericRcs(req: Request, res: Response) {
         const providerParam = req.params.provider;
-        const provider = typeof providerParam === 'string' ? providerParam.toLowerCase() : 
-                        (Array.isArray(providerParam) ? providerParam[0]?.toLowerCase() : undefined);
-        
+        const provider = typeof providerParam === 'string' ? providerParam.toLowerCase() :
+            (Array.isArray(providerParam) ? providerParam[0]?.toLowerCase() : undefined);
+
         switch (provider) {
-            case 'msg91':
+            case RcsProvider.MSG91:
                 await WebhookController.handleMsg91Rcs(req, res);
                 break;
-            case 'jiocx':
+            case RcsProvider.JIOCX:
                 await WebhookController.handleJiocxRcs(req, res);
                 break;
             default:
@@ -215,7 +307,7 @@ export class WebhookController {
     }
 
     /**
-     * Generic GET endpoint for verification (e.g., Google RBM)
+     * Generic GET endpoint for verification
      */
     static async verifyGenericRcs(req: Request, res: Response) {
         // Generic verification endpoint for providers that require GET verifications

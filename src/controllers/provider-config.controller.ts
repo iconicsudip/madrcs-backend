@@ -1,24 +1,40 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
+import { RcsProvider, RcsFunctionName } from '../enums/rcs.enum';
 
 export class ProviderConfigController {
   private static async ensureDefaults() {
-    const msg91Config = await prisma.providerConfig.findUnique({ where: { provider: 'msg91' } });
+    const msg91Config = await prisma.providerConfig.findUnique({ where: { provider: RcsProvider.MSG91 } });
     if (!msg91Config) {
       await prisma.providerConfig.create({
         data: {
-          provider: 'msg91',
-          allowed_templates: ['text_message', 'text_with_actions', 'rich_card', 'carousel']
+          provider: RcsProvider.MSG91,
+          allowed_templates: [
+            RcsFunctionName.TEXT_MESSAGE,
+            RcsFunctionName.TEXT_WITH_ACTIONS,
+            RcsFunctionName.RICH_CARD,
+            RcsFunctionName.CAROUSEL
+          ]
         }
       });
     }
 
-    const googleConfig = await prisma.providerConfig.findUnique({ where: { provider: 'google' } });
-    if (!googleConfig) {
+    const jiocxConfig = await prisma.providerConfig.findUnique({ where: { provider: RcsProvider.JIOCX } });
+    if (!jiocxConfig) {
       await prisma.providerConfig.create({
         data: {
-          provider: 'google',
-          allowed_templates: ['rich_card', 'carousel']
+          provider: RcsProvider.JIOCX,
+          allowed_templates: [
+            RcsFunctionName.TEXT_MESSAGE,
+            RcsFunctionName.TEXT_WITH_ACTIONS,
+            RcsFunctionName.RICH_CARD,
+            RcsFunctionName.CAROUSEL,
+            RcsFunctionName.OPEN_URL,
+            RcsFunctionName.DIAL,
+            RcsFunctionName.CALENDAR_EVENT,
+            RcsFunctionName.SHARE_LOCATION,
+            RcsFunctionName.VIEW_LOCATION
+          ]
         }
       });
     }
@@ -29,7 +45,7 @@ export class ProviderConfigController {
       await ProviderConfigController.ensureDefaults();
       
       const user = await prisma.user.findUnique({ where: { id: (req as any).user.id } });
-      const provider = user?.rcs_api || 'msg91';
+      const provider = user?.rcs_api || RcsProvider.MSG91;
 
       const config = await prisma.providerConfig.findUnique({
         where: { provider }

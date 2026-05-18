@@ -116,7 +116,8 @@ export class AuthService {
                 two_fact_enabled: true,
                 notification_pref: true,
                 credit_plan: true,
-                credit_balance: true
+                credit_balance: true,
+                rcs_api: true
             }
         });
 
