@@ -49,7 +49,7 @@ export class AdminService {
         msg91_project_id,
         jiocx_api_key,
         jiocx_project_id,
-        rcs_api: rcs_api || RcsProvider.MSG91,
+        rcs_api: rcs_api || RcsProvider.JIOCX,
         is_verified: true, // Admin created users are verified by default
         role: "user",
       },
